@@ -1,0 +1,2361 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>TONHERMES AI HQ 3D - Realistic Corporate Software House Campus</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="/static/three.min.js"></script>
+  <style>
+    :root {
+      --bg-obsidian: #0a101d;
+      --surface-panel: rgba(15, 23, 42, 0.90);
+      --border-subtle: rgba(148, 163, 184, 0.22);
+      --text-primary: #f8fafc;
+    }
+
+    * {
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: var(--bg-obsidian);
+      color: var(--text-primary);
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      touch-action: none;
+    }
+
+    canvas {
+      display: block;
+      width: 100vw;
+      height: 100vh;
+    }
+
+    .panel-surface {
+      background: var(--surface-panel);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid var(--border-subtle);
+    }
+
+    #labels-container {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      overflow: hidden;
+      z-index: 10;
+    }
+
+    .agent-floating-card {
+      position: absolute;
+      transform: translate(-50%, -100%);
+      pointer-events: auto;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+      transition: opacity 0.15s ease;
+      will-change: transform, left, top;
+    }
+
+    .agent-speech-bubble {
+      background: rgba(15, 23, 42, 0.95);
+      border: 1px solid rgba(148, 163, 184, 0.35);
+      color: #f1f5f9;
+      font-size: 12px;
+      line-height: 1.35;
+      padding: 6px 10px;
+      border-radius: 10px;
+      max-width: 220px;
+      text-align: center;
+      box-shadow: 0 8px 20px rgba(0, 0, 0, 0.55);
+      white-space: normal;
+    }
+
+    .agent-name-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(9, 13, 22, 0.94);
+      border: 1.5px solid rgba(255, 255, 255, 0.25);
+      padding: 4px 10px;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 700;
+      color: #ffffff;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.55);
+      white-space: nowrap;
+    }
+
+    .agent-floating-card.is-selected .agent-name-pill {
+      border-color: #38bdf8;
+      background: rgba(12, 74, 110, 0.96);
+    }
+
+    .no-scrollbar::-webkit-scrollbar { display: none; }
+    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+    button:focus-visible, input:focus-visible, select:focus-visible {
+      outline: 2px solid #38bdf8;
+      outline-offset: 2px;
+    }
+  </style>
+</head>
+<body class="select-none overflow-hidden">
+
+  <!-- 3D WebGL Canvas -->
+  <div id="canvas-container" class="absolute inset-0 z-0"></div>
+
+  <!-- Floating 3D HTML Labels & Speech Bubbles -->
+  <div id="labels-container"></div>
+
+  <!-- Top Navigation Header -->
+  <header class="absolute top-3 inset-x-3 flex flex-wrap justify-between items-center gap-2 pointer-events-none z-20 max-w-7xl mx-auto">
+    <div class="panel-surface px-3.5 py-2.5 rounded-xl flex items-center gap-3 pointer-events-auto shadow-xl">
+      <span class="w-3 h-3 rounded-full bg-emerald-400 shrink-0"></span>
+      <div>
+        <div class="font-bold text-sm text-white flex items-center gap-2">
+          <span>TONHERMES CORPORATE HQ</span>
+          <span id="agent-count-badge" class="text-xs bg-cyan-500/20 text-cyan-300 border border-cyan-400/30 px-2 py-0.5 rounded font-mono">6 AGENTS</span>
+        </div>
+        <div class="text-xs text-slate-300">Detailed Multi-Room Office • Lobi Resepsionis • Parkir & Taman Kota • 3D Humans</div>
+      </div>
+    </div>
+
+    <div class="flex items-center gap-2 pointer-events-auto">
+      <button onclick="openAddAgentModal()" class="bg-emerald-600 hover:bg-emerald-500 text-white px-3.5 py-2.5 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-lg transition-transform active:scale-95 border border-emerald-400/40">
+        <span>➕</span>
+        <span>Tambah Agent Baru</span>
+      </button>
+
+      <button id="btn-overview" onclick="setCameraOverview()" class="panel-surface hover:bg-slate-800 px-3 py-2.5 rounded-xl text-xs font-semibold text-slate-200 flex items-center gap-1.5 shadow-lg transition-transform active:scale-95" title="Lihat Seluruh Kampus Kantor">
+        <span>🏢</span>
+        <span class="hidden sm:inline">Overview Kampus</span>
+      </button>
+
+      <button id="btn-focus-room" onclick="focusSelectedAgentRoom()" class="panel-surface hover:bg-slate-800 px-3 py-2.5 rounded-xl text-xs font-semibold text-cyan-300 flex items-center gap-1.5 shadow-lg transition-transform active:scale-95" title="Zoom ke Ruangan Agent">
+        <span>🎯</span>
+        <span class="hidden sm:inline">Fokus Ruangan</span>
+      </button>
+
+      <a href="/KantorAI.apk" download class="panel-surface hover:bg-slate-800 px-3 py-2.5 rounded-xl text-xs font-semibold text-emerald-300 flex items-center gap-1 shadow-lg transition-transform active:scale-95">
+        <span>📲</span>
+        <span class="hidden md:inline">APK</span>
+      </a>
+    </div>
+  </header>
+
+  <!-- Bottom Control Dock -->
+  <div class="absolute bottom-3 inset-x-3 pointer-events-none z-20 flex flex-col gap-2 max-w-4xl mx-auto">
+
+    <!-- Selected Agent Control Card -->
+    <div id="action-drawer" class="panel-surface p-3.5 rounded-xl pointer-events-auto shadow-2xl">
+      <div class="flex flex-wrap items-center justify-between gap-2 pb-2.5 mb-2.5 border-b border-slate-700/70">
+        <div class="flex items-center gap-2.5 min-w-0">
+          <span id="drawer-dot" class="w-3.5 h-3.5 rounded-full bg-orange-500 shrink-0"></span>
+          <div class="min-w-0">
+            <div class="flex items-center gap-2">
+              <h3 id="drawer-name" class="font-bold text-sm text-white truncate">Hermes (CTO)</h3>
+              <span id="drawer-room-tag" class="text-xs font-mono px-2 py-0.5 rounded bg-slate-800 text-cyan-300 border border-slate-700">ROOM 01</span>
+              <span id="drawer-badge" class="text-xs uppercase font-mono px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">WORKING</span>
+            </div>
+            <p id="drawer-role" class="text-xs text-slate-300 truncate">Chief Technology Officer • VPS & DevOps Architect</p>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-1.5">
+          <button id="btn-delete-agent" onclick="deleteSelectedAgent()" class="hidden px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/30 transition-opacity" title="Hapus Agent Ini">
+            🗑️ Hapus
+          </button>
+        </div>
+      </div>
+
+      <!-- Current Task & Quick Task Updater -->
+      <div class="flex flex-col sm:flex-row gap-2 mb-2.5">
+        <div class="flex-1 bg-slate-900/80 border border-slate-700/70 rounded-lg px-3 py-1.5 flex items-center gap-2 min-w-0">
+          <span class="text-xs text-slate-400 shrink-0">Tugas:</span>
+          <span id="drawer-task" class="text-xs text-slate-200 font-medium truncate">Managing servers & CI/CD pipelines</span>
+        </div>
+        <div class="flex gap-1.5">
+          <input id="quick-task-input" type="text" placeholder="Ketik tugas / pesan dialog baru..." class="bg-slate-900/90 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white placeholder-slate-500 w-48 sm:w-56" onkeydown="if(event.key==='Enter') submitQuickTask()">
+          <button onclick="submitQuickTask()" class="bg-cyan-600 hover:bg-cyan-500 text-white px-3 py-1.5 rounded-lg text-xs font-semibold shrink-0 transition-transform active:scale-95">
+            Kirim
+          </button>
+        </div>
+      </div>
+
+      <!-- 5 Location Destination Buttons -->
+      <div class="grid grid-cols-5 gap-1.5">
+        <button onclick="sendAction('desk', 'working', 'Bekerja Fokus di Ruangan Pribadi')" class="bg-slate-800 hover:bg-slate-700 border border-slate-600/60 active:scale-95 py-2 px-1.5 rounded-lg text-xs font-semibold flex flex-col sm:flex-row items-center justify-center gap-1 text-slate-100 transition-transform">
+          <span>💻</span>
+          <span>Ruang Kerja</span>
+        </button>
+        <button onclick="sendAction('meeting', 'working', 'Diskusi & Briefing di Ruang Rapat Utama')" class="bg-slate-800 hover:bg-slate-700 border border-slate-600/60 active:scale-95 py-2 px-1.5 rounded-lg text-xs font-semibold flex flex-col sm:flex-row items-center justify-center gap-1 text-slate-100 transition-transform">
+          <span>📊</span>
+          <span>Ruang Rapat</span>
+        </button>
+        <button onclick="sendAction('coffee', 'idle', 'Coffee Break & Ngopi di Pantry Bar')" class="bg-slate-800 hover:bg-slate-700 border border-slate-600/60 active:scale-95 py-2 px-1.5 rounded-lg text-xs font-semibold flex flex-col sm:flex-row items-center justify-center gap-1 text-slate-100 transition-transform">
+          <span>☕</span>
+          <span>Cafeteria</span>
+        </button>
+        <button onclick="sendAction('sofa', 'idle', 'Istirahat & Main Ping-Pong di Lounge')" class="bg-slate-800 hover:bg-slate-700 border border-slate-600/60 active:scale-95 py-2 px-1.5 rounded-lg text-xs font-semibold flex flex-col sm:flex-row items-center justify-center gap-1 text-slate-100 transition-transform">
+          <span>🛋️</span>
+          <span>VIP Lounge</span>
+        </button>
+        <button onclick="sendAction('pool', 'idle', 'Refreshing & Berenang di Kolam Taman')" class="bg-slate-800 hover:bg-slate-700 border border-slate-600/60 active:scale-95 py-2 px-1.5 rounded-lg text-xs font-semibold flex flex-col sm:flex-row items-center justify-center gap-1 text-slate-100 transition-transform">
+          <span>🏊</span>
+          <span>Kolam Taman</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Dynamic Agent Switcher Bar -->
+    <div class="panel-surface p-1.5 rounded-xl pointer-events-auto flex items-center gap-1.5 shadow-xl overflow-x-auto no-scrollbar">
+      <div id="agent-tabs-container" class="flex items-center gap-1.5 flex-1 min-w-0"></div>
+      <button onclick="openAddAgentModal()" class="px-3 py-2 rounded-lg text-xs font-bold bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/30 shrink-0 flex items-center gap-1 transition-transform active:scale-95">
+        <span>➕</span>
+        <span>Agent Baru</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Modal: Tambah Agent Karyawan Baru -->
+  <div id="add-agent-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/75 p-4">
+    <div class="panel-surface w-full max-w-md rounded-xl p-5 shadow-2xl border border-slate-700">
+      <div class="flex items-center justify-between pb-3 mb-4 border-b border-slate-700">
+        <div>
+          <h2 class="text-base font-bold text-white">Tambah Agent Karyawan Baru</h2>
+          <p class="text-xs text-slate-400">Otomatis mendapatkan karakter manusia 3D & ruangan kerja pribadi lengkap</p>
+        </div>
+        <button onclick="closeAddAgentModal()" class="text-slate-400 hover:text-white text-sm font-bold px-2 py-1 rounded">✕</button>
+      </div>
+
+      <form id="add-agent-form" onsubmit="submitNewAgent(event)" class="flex flex-col gap-3">
+        <div>
+          <label class="block text-xs font-semibold text-slate-300 mb-1">Nama Agent / Karyawan *</label>
+          <input id="new-agent-name" type="text" required placeholder="Contoh: Dinda (SEO AI) atau Ares (Backend)" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white">
+        </div>
+
+        <div class="grid grid-cols-3 gap-2">
+          <div class="col-span-2">
+            <label class="block text-xs font-semibold text-slate-300 mb-1">Jabatan / Spesialisasi</label>
+            <input id="new-agent-role" type="text" placeholder="Contoh: Fullstack & Database AI" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white">
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-300 mb-1">Kode Badge</label>
+            <input id="new-agent-badge" type="text" maxlength="8" placeholder="BACKEND" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white uppercase font-mono">
+          </div>
+        </div>
+
+        <div class="grid grid-cols-3 gap-2">
+          <div>
+            <label class="block text-xs font-semibold text-slate-300 mb-1">Gaya Rambut 3D</label>
+            <select id="new-agent-hair" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-2 text-xs text-white">
+              <option value="spiky">Spiky Modern</option>
+              <option value="ponytail">Ponytail Panjang</option>
+              <option value="bun">Creative Bun</option>
+              <option value="exec">Executive Part</option>
+              <option value="short">Short Clean</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-300 mb-1">Aksesori Kepala</label>
+            <select id="new-agent-accessory" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-2 text-xs text-white">
+              <option value="headphones">Headphone Studio</option>
+              <option value="glasses">Kacamata Tech</option>
+              <option value="none">Tanpa Aksesori</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-300 mb-1">Warna Jas & Ruang</label>
+            <select id="new-agent-color" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-2 text-xs text-white">
+              <option value="#06b6d4">Cyan Tech</option>
+              <option value="#f97316">Orange CTO</option>
+              <option value="#10b981">Emerald Finance</option>
+              <option value="#3b82f6">Royal Blue</option>
+              <option value="#ec4899">Rose Creative</option>
+              <option value="#eab308">Amber Gold</option>
+              <option value="#ef4444">Crimson Red</option>
+              <option value="#14b8a6">Teal Mint</option>
+            </select>
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold text-slate-300 mb-1">Tugas Saat Ini</label>
+          <input id="new-agent-task" type="text" placeholder="Contoh: Mengoptimasi query database & indexing" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white">
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold text-slate-300 mb-1">Dialog Sapaan</label>
+          <input id="new-agent-dialogue" type="text" placeholder="Contoh: Halo Boss! Ruangan baru saya sudah siap beroperasi." class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white">
+        </div>
+
+        <div class="flex justify-end gap-2 pt-2">
+          <button type="button" onclick="closeAddAgentModal()" class="px-4 py-2 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300">
+            Batal
+          </button>
+          <button type="submit" id="btn-submit-agent" class="px-4 py-2 rounded-lg text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg">
+            ➕ Buat Agent & Bangun Ruangan
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    // ============================================================================
+    // 1. PROCEDURAL ARCHITECTURAL TEXTURES (WOOD PARQUET, MARBLE TILE, CODE SCREEN, BUILDING WINDOWS)
+    // ============================================================================
+    function createWoodFloorTexture() {
+      const c = document.createElement('canvas');
+      c.width = 256;
+      c.height = 256;
+      const ctx = c.getContext('2d');
+      ctx.fillStyle = '#231914';
+      ctx.fillRect(0, 0, 256, 256);
+      const planks = ['#291e17', '#1f1610', '#2d211a', '#241a14'];
+      for (let y = 0; y < 256; y += 32) {
+        for (let x = 0; x < 256; x += 64) {
+          ctx.fillStyle = planks[(x + y) % planks.length];
+          const offset = (y / 32) % 2 === 0 ? 0 : 32;
+          ctx.fillRect((x + offset) % 256, y, 62, 30);
+          ctx.strokeStyle = '#140e0a';
+          ctx.lineWidth = 1.5;
+          ctx.strokeRect((x + offset) % 256, y, 62, 30);
+        }
+      }
+      const tex = new THREE.CanvasTexture(c);
+      tex.wrapS = THREE.RepeatWrapping;
+      tex.wrapT = THREE.RepeatWrapping;
+      tex.repeat.set(3, 2);
+      return tex;
+    }
+
+    function createMarbleTileTexture() {
+      const c = document.createElement('canvas');
+      c.width = 256;
+      c.height = 256;
+      const ctx = c.getContext('2d');
+      // Dark Obsidian Slate Porcelain Tile (Tidak silau/putih)
+      ctx.fillStyle = '#141c2b';
+      ctx.fillRect(0, 0, 256, 256);
+      ctx.strokeStyle = '#0b101b';
+      ctx.lineWidth = 3;
+      for (let i = 0; i <= 256; i += 64) {
+        ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, 256); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(0, i); ctx.lineTo(256, i); ctx.stroke();
+      }
+      // Subtle dark slate veins
+      ctx.strokeStyle = 'rgba(51, 65, 85, 0.35)';
+      ctx.lineWidth = 2;
+      for (let i = 0; i < 10; i++) {
+        ctx.beginPath();
+        ctx.moveTo(Math.random() * 256, Math.random() * 256);
+        ctx.lineTo(Math.random() * 256, Math.random() * 256);
+        ctx.stroke();
+      }
+      const tex = new THREE.CanvasTexture(c);
+      tex.wrapS = THREE.RepeatWrapping;
+      tex.wrapT = THREE.RepeatWrapping;
+      tex.repeat.set(8, 14);
+      return tex;
+    }
+
+    function createMonitorCodeTexture(accentHex) {
+      const c = document.createElement('canvas');
+      c.width = 256;
+      c.height = 144;
+      const ctx = c.getContext('2d');
+      ctx.fillStyle = '#090d16';
+      ctx.fillRect(0, 0, 256, 144);
+      ctx.fillStyle = '#111827';
+      ctx.fillRect(0, 0, 38, 144);
+      ctx.fillStyle = accentHex || '#06b6d4';
+      ctx.fillRect(0, 0, 256, 6);
+      const colors = [accentHex || '#0284c7', '#059669', '#d97706', '#64748b'];
+      for (let y = 18; y < 130; y += 10) {
+        const indent = 48 + (y % 30 === 0 ? 0 : 14);
+        const w = 40 + ((y * 17) % 110);
+        ctx.fillStyle = colors[(y / 10) % colors.length];
+        ctx.fillRect(indent, y, w, 4);
+      }
+      return new THREE.CanvasTexture(c);
+    }
+
+    function createSkyscraperWindowTexture() {
+      const c = document.createElement('canvas');
+      c.width = 256;
+      c.height = 512;
+      const ctx = c.getContext('2d');
+      ctx.fillStyle = '#0b111e';
+      ctx.fillRect(0, 0, 256, 512);
+      for (let y = 14; y < 500; y += 24) {
+        for (let x = 14; x < 240; x += 30) {
+          const lit = Math.random() > 0.62;
+          if (lit) {
+            ctx.fillStyle = Math.random() > 0.35 ? '#0369a1' : '#b45309';
+            ctx.globalAlpha = 0.18 + Math.random() * 0.22;
+            ctx.fillRect(x, y, 16, 12);
+          } else {
+            ctx.fillStyle = '#111827';
+            ctx.globalAlpha = 0.85;
+            ctx.fillRect(x, y, 16, 12);
+          }
+        }
+      }
+      ctx.globalAlpha = 1.0;
+      return new THREE.CanvasTexture(c);
+    }
+
+    const sharedWoodTex = createWoodFloorTexture();
+    const sharedMarbleTex = createMarbleTileTexture();
+    const sharedSkyscraperTex = createSkyscraperWindowTexture();
+
+    // ============================================================================
+    // 2. STATE & ROOM LAYOUT MATH
+    // ============================================================================
+    let activeAgentId = 'cto';
+    let agentsState = {};
+
+    const agentMeshes = {};
+    const roomMeshes = {};
+    const botTargets = {};
+    const floatingCards = {};
+    const raycastMeshes = [];
+
+    const SHARED_ZONES = {
+      meeting: { x: 0, y: 0.85, z: -22, pose: 'meeting' },
+      coffee:  { x: -7.5, y: 0.85, z: -3.5, pose: 'coffee' },
+      sofa:    { x: 7.5, y: 0.85, z: -3.5, pose: 'sofa' },
+      pool:    { x: -11.0, y: 0.30, z: 36.0, pose: 'pool' }
+    };
+
+    function getPrivateRoomLayout(roomIndex) {
+      const isRightWing = (roomIndex % 2 === 1);
+      const row = Math.floor(roomIndex / 2);
+      const roomW = 18.5;
+      const roomD = 12.5;
+      const centerX = isRightWing ? 28.5 : -28.5;
+      const centerZ = -21.0 + row * 13.5;
+      const doorDir = isRightWing ? -1 : 1; // Door faces central corridor (x = 0)
+      const deskX = centerX - doorDir * 1.8;
+      const deskZ = centerZ - 1.4;
+      const chairX = deskX;
+      const chairZ = deskZ - 1.45;
+      return {
+        roomIndex,
+        isRightWing,
+        row,
+        roomW,
+        roomD,
+        centerX,
+        centerZ,
+        doorDir,
+        deskX,
+        deskZ,
+        chairX,
+        chairZ
+      };
+    }
+
+    function getTargetForAgent(id, agent, indexOffset = 0) {
+      const loc = agent.location || 'desk';
+      const rIdx = typeof agent.room_index === 'number' ? agent.room_index : indexOffset;
+      if (loc === 'desk') {
+        const room = getPrivateRoomLayout(rIdx);
+        return { x: room.chairX, y: 0.85, z: room.chairZ, rotY: 0, pose: 'working_desk' };
+      }
+      if (loc === 'meeting') {
+        const seatIdx = rIdx % 10;
+        const side = seatIdx % 2 === 0 ? -1 : 1;
+        const col = Math.floor(seatIdx / 2) - 2;
+        return {
+          x: col * 2.2,
+          y: 0.85,
+          z: -22.0 + side * 2.2,
+          rotY: side === -1 ? 0 : Math.PI,
+          pose: 'sitting_meeting'
+        };
+      }
+      if (loc === 'coffee') {
+        const seatOffset = ((rIdx % 4) - 1.5) * 1.6;
+        return {
+          x: -7.5 + seatOffset,
+          y: 0.85,
+          z: -2.2,
+          rotY: Math.PI,
+          pose: 'standing_coffee'
+        };
+      }
+      if (loc === 'sofa') {
+        const offset = ((rIdx % 4) - 1.5) * 1.5;
+        return {
+          x: 7.5 + offset,
+          y: 0.85,
+          z: -4.2,
+          rotY: 0,
+          pose: 'sitting_sofa'
+        };
+      }
+      if (loc === 'pool') {
+        const angle = rIdx * 1.25;
+        return {
+          x: SHARED_ZONES.pool.x + Math.cos(angle) * 3.2,
+          y: 0.25,
+          z: SHARED_ZONES.pool.z + Math.sin(angle) * 2.0,
+          rotY: angle,
+          pose: 'swimming'
+        };
+      }
+      const room = getPrivateRoomLayout(rIdx);
+      return { x: room.chairX, y: 0.85, z: room.chairZ, rotY: 0, pose: 'working_desk' };
+    }
+
+    // ============================================================================
+    // 3. THREE.JS SCENE, CAMERA & WARM ARCHITECTURAL LIGHTING
+    // ============================================================================
+    const container = document.getElementById('canvas-container');
+    const labelsContainer = document.getElementById('labels-container');
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x0b1322);
+    scene.fog = new THREE.FogExp2(0x0b1322, 0.0035);
+
+    const camera = new THREE.PerspectiveCamera(42, window.innerWidth / window.innerHeight, 0.1, 1400);
+    const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    container.appendChild(renderer.domElement);
+
+    let camRadius = 76;
+    let camTheta = 0.52;
+    let camPhi = 0.86;
+    const camTarget = new THREE.Vector3(0, 2, 2);
+    const desiredCamTarget = new THREE.Vector3(0, 2, 2);
+    let desiredCamRadius = 76;
+
+    function updateCameraPos() {
+      camera.position.x = camTarget.x + camRadius * Math.sin(camPhi) * Math.sin(camTheta);
+      camera.position.y = camTarget.y + camRadius * Math.cos(camPhi);
+      camera.position.z = camTarget.z + camRadius * Math.sin(camPhi) * Math.cos(camTheta);
+      camera.lookAt(camTarget);
+    }
+    updateCameraPos();
+
+    function setCameraOverview() {
+      desiredCamTarget.set(0, 2, 2);
+      desiredCamRadius = 82;
+    }
+
+    function focusSelectedAgentRoom() {
+      const meshObj = agentMeshes[activeAgentId];
+      if (!meshObj) return;
+      const pos = meshObj.group.position;
+      desiredCamTarget.set(pos.x, 2.2, pos.z);
+      desiredCamRadius = 25;
+    }
+
+    // Balanced dark-mode architectural illumination (warm & comfortable, not glaring white)
+    const ambientLight = new THREE.AmbientLight(0x94a3b8, 0.45);
+    scene.add(ambientLight);
+
+    const hemiLight = new THREE.HemisphereLight(0xcbd5e1, 0x0f172a, 0.35);
+    hemiLight.position.set(0, 80, 0);
+    scene.add(hemiLight);
+
+    const sunLight = new THREE.DirectionalLight(0xe2e8f0, 0.72);
+    sunLight.position.set(65, 95, 55);
+    sunLight.castShadow = true;
+    sunLight.shadow.mapSize.width = 2048;
+    sunLight.shadow.mapSize.height = 2048;
+    sunLight.shadow.camera.near = 10;
+    sunLight.shadow.camera.far = 280;
+    const sb = 75;
+    sunLight.shadow.camera.left = -sb;
+    sunLight.shadow.camera.right = sb;
+    sunLight.shadow.camera.top = sb;
+    sunLight.shadow.camera.bottom = -sb;
+    scene.add(sunLight);
+
+    function createTextSignMesh(text, subText, accentColorHex, width = 7.5, height = 1.45) {
+      const canvas = document.createElement('canvas');
+      canvas.width = 512;
+      canvas.height = 112;
+      const ctx = canvas.getContext('2d');
+
+      ctx.fillStyle = '#0f172a';
+      ctx.fillRect(0, 0, 512, 112);
+
+      ctx.fillStyle = accentColorHex || '#06b6d4';
+      ctx.fillRect(0, 0, 512, 9);
+      ctx.fillRect(0, 0, 14, 112);
+
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 34px ui-sans-serif, system-ui, sans-serif';
+      ctx.textAlign = 'left';
+      ctx.fillText(String(text || '').toUpperCase().slice(0, 24), 28, 52);
+
+      ctx.fillStyle = '#cbd5e1';
+      ctx.font = '600 22px ui-monospace, monospace';
+      ctx.fillText(String(subText || '').slice(0, 34), 28, 88);
+
+      const texture = new THREE.CanvasTexture(canvas);
+      texture.needsUpdate = true;
+
+      return new THREE.Mesh(
+        new THREE.PlaneGeometry(width, height),
+        new THREE.MeshBasicMaterial({ map: texture, side: THREE.DoubleSide })
+      );
+    }
+
+    // ============================================================================
+    // 4. EXTERIOR CAMPUS GROUNDS, LANDSCAPING, PARKING LOT, TREES & SKYLINE
+    // ============================================================================
+    const exteriorGroup = new THREE.Group();
+    scene.add(exteriorGroup);
+
+    // Lush Green Grass Campus Lawn
+    const lawn = new THREE.Mesh(
+      new THREE.PlaneGeometry(420, 420),
+      new THREE.MeshLambertMaterial({ color: 0x11221c })
+    );
+    lawn.rotation.x = -Math.PI / 2;
+    lawn.position.y = -0.06;
+    lawn.receiveShadow = true;
+    exteriorGroup.add(lawn);
+
+    // Stone Pedestrian Courtyard Plaza around the Office Building
+    const courtyardPlaza = new THREE.Mesh(
+      new THREE.PlaneGeometry(118, 105),
+      new THREE.MeshStandardMaterial({ color: 0x263142, roughness: 0.75 })
+    );
+    courtyardPlaza.rotation.x = -Math.PI / 2;
+    courtyardPlaza.position.set(0, -0.02, 6);
+    courtyardPlaza.receiveShadow = true;
+    exteriorGroup.add(courtyardPlaza);
+
+    // 4-Lane City Asphalt Avenue (Front & East Side)
+    const roadMat = new THREE.MeshStandardMaterial({ color: 0x141b26, roughness: 0.85 });
+    const frontAvenue = new THREE.Mesh(new THREE.PlaneGeometry(380, 16), roadMat);
+    frontAvenue.rotation.x = -Math.PI / 2;
+    frontAvenue.position.set(0, 0.01, 56);
+    frontAvenue.receiveShadow = true;
+    exteriorGroup.add(frontAvenue);
+
+    const eastAvenue = new THREE.Mesh(new THREE.PlaneGeometry(16, 380), roadMat);
+    eastAvenue.rotation.x = -Math.PI / 2;
+    eastAvenue.position.set(66, 0.01, 0);
+    eastAvenue.receiveShadow = true;
+    exteriorGroup.add(eastAvenue);
+
+    // Sidewalks & Curbs along avenues
+    const sidewalkMat = new THREE.MeshLambertMaterial({ color: 0x334155 });
+    const frontSidewalk = new THREE.Mesh(new THREE.BoxGeometry(380, 0.18, 4.5), sidewalkMat);
+    frontSidewalk.position.set(0, 0.09, 45.8);
+    exteriorGroup.add(frontSidewalk);
+
+    // Zebra Crosswalk in front of Main Entrance
+    const stripeMat = new THREE.MeshBasicMaterial({ color: 0x475569 });
+    for (let z = 49.5; z <= 62.5; z += 1.6) {
+      const zebra = new THREE.Mesh(new THREE.PlaneGeometry(5.5, 0.8), stripeMat);
+      zebra.rotation.x = -Math.PI / 2;
+      zebra.position.set(0, 0.03, z);
+      exteriorGroup.add(zebra);
+    }
+
+    // Road Dashed Center Lines
+    for (let x = -160; x < 160; x += 9) {
+      if (Math.abs(x) < 6) continue;
+      const dash = new THREE.Mesh(new THREE.PlaneGeometry(4.5, 0.35), stripeMat);
+      dash.rotation.x = -Math.PI / 2;
+      dash.position.set(x, 0.03, 56);
+      exteriorGroup.add(dash);
+    }
+
+    // EMPLOYEE PARKING LOT (East Courtyard: x = 48, z = -18 to +18)
+    const parkingLot = new THREE.Mesh(
+      new THREE.PlaneGeometry(16, 48),
+      new THREE.MeshStandardMaterial({ color: 0x1a2230, roughness: 0.8 })
+    );
+    parkingLot.rotation.x = -Math.PI / 2;
+    parkingLot.position.set(48.5, 0.01, -2);
+    exteriorGroup.add(parkingLot);
+
+    // Detailed 3D Vehicle Builder (For Parked Cars & Moving Traffic)
+    function buildDetailedVehicle(colorHex) {
+      const vg = new THREE.Group();
+      const paintMat = new THREE.MeshStandardMaterial({ color: colorHex, roughness: 0.25, metalness: 0.5 });
+      const glassM = new THREE.MeshStandardMaterial({ color: 0x090d16, roughness: 0.1, metalness: 0.8 });
+      const tireM = new THREE.MeshLambertMaterial({ color: 0x111827 });
+      const rimM = new THREE.MeshBasicMaterial({ color: 0xcbd5e1 });
+
+      // Lower chassis
+      const body = new THREE.Mesh(new THREE.BoxGeometry(3.8, 0.8, 1.85), paintMat);
+      body.position.y = 0.65;
+      body.castShadow = true;
+      vg.add(body);
+
+      // Upper cabin
+      const cabin = new THREE.Mesh(new THREE.BoxGeometry(2.1, 0.65, 1.62), glassM);
+      cabin.position.set(-0.15, 1.32, 0);
+      vg.add(cabin);
+
+      // Roof top
+      const roof = new THREE.Mesh(new THREE.BoxGeometry(1.9, 0.08, 1.58), paintMat);
+      roof.position.set(-0.15, 1.66, 0);
+      vg.add(roof);
+
+      // 4 Wheels with rims
+      [[-1.15, 0.92], [1.15, 0.92], [-1.15, -0.92], [1.15, -0.92]].forEach(([wx, wz]) => {
+        const wheel = new THREE.Mesh(new THREE.CylinderGeometry(0.36, 0.36, 0.24, 14), tireM);
+        wheel.rotation.x = Math.PI / 2;
+        wheel.position.set(wx, 0.36, wz);
+        const rim = new THREE.Mesh(new THREE.CylinderGeometry(0.20, 0.20, 0.26, 10), rimM);
+        rim.rotation.x = Math.PI / 2;
+        rim.position.set(wx, 0.36, wz);
+        vg.add(wheel, rim);
+      });
+
+      // Headlights & Taillights
+      const hl = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.2, 0.38), new THREE.MeshBasicMaterial({ color: 0xfef08a }));
+      hl.position.set(1.91, 0.72, 0.62);
+      const hl2 = hl.clone();
+      hl2.position.z = -0.62;
+      const tl = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.2, 0.42), new THREE.MeshBasicMaterial({ color: 0xef4444 }));
+      tl.position.set(-1.91, 0.72, 0.62);
+      const tl2 = tl.clone();
+      tl2.position.z = -0.62;
+      vg.add(hl, hl2, tl, tl2);
+
+      return vg;
+    }
+
+    // Paint parking bay lines & park 6 employee cars + EV Chargers
+    const parkedColors = [0x3b82f6, 0x10b981, 0xf97316, 0xe2e8f0, 0xef4444, 0x06b6d4];
+    for (let i = 0; i < 7; i++) {
+      const pz = -18 + i * 6.0;
+      const bayLine = new THREE.Mesh(new THREE.PlaneGeometry(5.5, 0.18), stripeMat);
+      bayLine.rotation.x = -Math.PI / 2;
+      bayLine.position.set(48.5, 0.03, pz);
+      exteriorGroup.add(bayLine);
+
+      if (i < 6) {
+        const pCar = buildDetailedVehicle(parkedColors[i]);
+        pCar.position.set(48.5, 0, pz + 3.0);
+        pCar.rotation.y = Math.PI;
+        exteriorGroup.add(pCar);
+
+        // EV Charging Bollard
+        const charger = new THREE.Mesh(new THREE.BoxGeometry(0.35, 1.4, 0.35), new THREE.MeshStandardMaterial({ color: 0x0f172a }));
+        charger.position.set(44.8, 0.7, pz + 3.0);
+        const cLed = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.3, 0.22), new THREE.MeshBasicMaterial({ color: 0x10b981 }));
+        cLed.position.set(45.0, 1.1, pz + 3.0);
+        exteriorGroup.add(charger, cLed);
+      }
+    }
+
+    // Moving Traffic on Front & East Avenues
+    const cars = [];
+    function spawnMovingTraffic(isZ, laneOffset, speed, colorHex) {
+      const car = buildDetailedVehicle(colorHex);
+      car.userData = { isZ, speed };
+      if (!isZ) {
+        car.position.set((Math.random() - 0.5) * 260, 0, 56 + laneOffset);
+        car.rotation.y = speed > 0 ? 0 : Math.PI;
+      } else {
+        car.position.set(66 + laneOffset, 0, (Math.random() - 0.5) * 260);
+        car.rotation.y = speed > 0 ? -Math.PI / 2 : Math.PI / 2;
+      }
+      exteriorGroup.add(car);
+      cars.push(car);
+    }
+    spawnMovingTraffic(false, 3.5, 0.34, 0x38bdf8);
+    spawnMovingTraffic(false, 3.5, 0.26, 0xf59e0b);
+    spawnMovingTraffic(false, -3.5, -0.30, 0xef4444);
+    spawnMovingTraffic(false, -3.5, -0.36, 0xe2e8f0);
+    spawnMovingTraffic(true, 3.5, 0.28, 0x10b981);
+    spawnMovingTraffic(true, -3.5, -0.32, 0x3b82f6);
+
+    // Outdoor Trees, Manicured Hedges, Park Benches & Street Lamps
+    function createLushTree(x, z, scale = 1.0) {
+      const tg = new THREE.Group();
+      const trunk = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.28 * scale, 0.42 * scale, 2.8 * scale, 10),
+        new THREE.MeshLambertMaterial({ color: 0x5c4033 })
+      );
+      trunk.position.y = 1.4 * scale;
+      trunk.castShadow = true;
+      tg.add(trunk);
+
+      const foliageMat1 = new THREE.MeshLambertMaterial({ color: 0x15803d });
+      const foliageMat2 = new THREE.MeshLambertMaterial({ color: 0x16a34a });
+      const c1 = new THREE.Mesh(new THREE.DodecahedronGeometry(1.85 * scale, 1), foliageMat1);
+      c1.position.set(0, 3.6 * scale, 0);
+      c1.castShadow = true;
+      const c2 = new THREE.Mesh(new THREE.DodecahedronGeometry(1.35 * scale, 1), foliageMat2);
+      c2.position.set(0.7 * scale, 4.4 * scale, 0.5 * scale);
+      const c3 = new THREE.Mesh(new THREE.DodecahedronGeometry(1.25 * scale, 1), foliageMat2);
+      c3.position.set(-0.7 * scale, 4.2 * scale, -0.4 * scale);
+      tg.add(c1, c2, c3);
+
+      tg.position.set(x, 0, z);
+      exteriorGroup.add(tg);
+    }
+
+    // Plant trees around the campus perimeter
+    [
+      [-46, -28, 1.2], [-48, -12, 1.0], [-46, 4, 1.3], [-48, 20, 1.1], [-45, 36, 1.2],
+      [46, 28, 1.1], [46, 38, 1.25], [-24, 44, 1.0], [24, 44, 1.0],
+      [-32, -38, 1.3], [0, -38, 1.2], [32, -38, 1.3]
+    ].forEach(([tx, tz, sc]) => createLushTree(tx, tz, sc));
+
+    // Street Lamps along Front Sidewalk & Courtyard
+    function createCampusStreetLamp(x, z) {
+      const lg = new THREE.Group();
+      const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.16, 6.5, 10), new THREE.MeshStandardMaterial({ color: 0x334155, metalness: 0.6 }));
+      pole.position.y = 3.25;
+      const arm = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.12, 0.12), pole.material);
+      arm.position.set(0.55, 6.4, 0);
+      const fixture = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.15, 0.35), new THREE.MeshBasicMaterial({ color: 0xd97706 }));
+      fixture.position.set(1.1, 6.3, 0);
+      lg.add(pole, arm, fixture);
+      lg.position.set(x, 0, z);
+      exteriorGroup.add(lg);
+    }
+    [[-34, 45], [-14, 45], [14, 45], [34, 45], [56, -20], [56, 4], [56, 28]].forEach(([lx, lz]) => createCampusStreetLamp(lx, lz));
+
+    // Detailed Textured City Skyline Towers in the Distance
+    const skyMat = new THREE.MeshLambertMaterial({ map: sharedSkyscraperTex });
+    const skyPositions = [
+      [-95, -85, 22, 65, 22], [-55, -95, 26, 82, 24], [0, -100, 30, 95, 26],
+      [55, -95, 24, 75, 22], [100, -85, 26, 68, 26], [-105, -25, 22, 58, 22],
+      [-105, 35, 24, 72, 24], [105, -20, 26, 80, 24], [105, 40, 22, 62, 22]
+    ];
+    skyPositions.forEach(([bx, bz, bw, bh, bd]) => {
+      const tower = new THREE.Mesh(new THREE.BoxGeometry(bw, bh, bd), skyMat);
+      tower.position.set(bx, bh / 2, bz);
+      exteriorGroup.add(tower);
+      // Roof beacon
+      const roofCap = new THREE.Mesh(new THREE.BoxGeometry(bw - 3, 1.5, bd - 3), new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.6 }));
+      roofCap.position.set(bx, bh + 0.75, bz);
+      exteriorGroup.add(roofCap);
+    });
+
+    // ============================================================================
+    // 5. OFFICE BUILDING STRUCTURE, CURTAIN WALLS, WINDOWS & COLUMNS
+    // ============================================================================
+    const hqGroup = new THREE.Group();
+    scene.add(hqGroup);
+
+    const roomsContainerGroup = new THREE.Group();
+    hqGroup.add(roomsContainerGroup);
+
+    const podiumMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.75 });
+    const marbleFloorMat = new THREE.MeshStandardMaterial({ map: sharedMarbleTex, roughness: 0.45, metalness: 0.08 });
+    const woodFloorMat = new THREE.MeshStandardMaterial({ map: sharedWoodTex, roughness: 0.5, metalness: 0.05 });
+    const wallConcreteMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.65 });
+    const columnSteelMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.4, metalness: 0.65 });
+    const woodSlatMat = new THREE.MeshStandardMaterial({ color: 0x5c2d0c, roughness: 0.6 });
+    const glassCurtainMat = new THREE.MeshPhysicalMaterial({
+      color: 0x38bdf8,
+      transparent: true,
+      opacity: 0.20,
+      roughness: 0.12,
+      metalness: 0.15
+    });
+    const darkFrameMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.4, metalness: 0.6 });
+    const walnutWoodMat = new THREE.MeshStandardMaterial({ color: 0x3e2414, roughness: 0.5 });
+
+    let currentMaxRows = 0;
+    const perimeterGroup = new THREE.Group();
+    hqGroup.add(perimeterGroup);
+
+    function rebuildBuildingPerimeter(totalAgentsCount) {
+      const rowsNeeded = Math.max(3, Math.ceil(totalAgentsCount / 2));
+      if (rowsNeeded === currentMaxRows) return;
+      currentMaxRows = rowsNeeded;
+
+      while (perimeterGroup.children.length > 0) {
+        perimeterGroup.remove(perimeterGroup.children[0]);
+      }
+
+      const buildingW = 78;
+      const northZ = -31;
+      const southZ = Math.max(30, -21 + rowsNeeded * 13.5 + 9);
+      const buildingD = southZ - northZ;
+      const centerZ = (northZ + southZ) / 2;
+
+      // 1. Stepped Architectural Stone Podium Base
+      const podium = new THREE.Mesh(new THREE.BoxGeometry(buildingW + 3, 0.84, buildingD + 3), podiumMat);
+      podium.position.set(0, 0.42, centerZ);
+      podium.receiveShadow = true;
+      perimeterGroup.add(podium);
+
+      // 2. Main Marble-Tiled Central Atrium & Floor Slab
+      const marbleFloor = new THREE.Mesh(new THREE.BoxGeometry(buildingW, 0.08, buildingD), marbleFloorMat);
+      marbleFloor.position.set(0, 0.85, centerZ);
+      marbleFloor.receiveShadow = true;
+      perimeterGroup.add(marbleFloor);
+
+      // 3. Exterior Curtain Wall System (Concrete Lower Wainscot + Mullioned Glass Windows + Steel Columns + Top Cornice Beam!)
+      const wallH = 5.8;
+
+      function buildArchitecturalFacadeWall(length, startX, startZ, isAlongZ) {
+        const fg = new THREE.Group();
+
+        // Lower stone wainscot wall (1.4m high)
+        const lowWall = new THREE.Mesh(
+          new THREE.BoxGeometry(isAlongZ ? 0.55 : length, 1.4, isAlongZ ? length : 0.55),
+          wallConcreteMat
+        );
+        lowWall.position.set(startX, 0.85 + 0.7, startZ);
+        lowWall.castShadow = true;
+        fg.add(lowWall);
+
+        // Middle panoramic double-glazed glass window ribbon (3.4m high)
+        const winGlass = new THREE.Mesh(
+          new THREE.BoxGeometry(isAlongZ ? 0.18 : length - 0.4, 3.4, isAlongZ ? length - 0.4 : 0.18),
+          glassCurtainMat
+        );
+        winGlass.position.set(startX, 0.85 + 1.4 + 1.7, startZ);
+        fg.add(winGlass);
+
+        // Upper architectural cornice beam (1.0m high)
+        const topBeam = new THREE.Mesh(
+          new THREE.BoxGeometry(isAlongZ ? 0.75 : length + 0.4, 0.9, isAlongZ ? length + 0.4 : 0.75),
+          columnSteelMat
+        );
+        topBeam.position.set(startX, 0.85 + wallH - 0.45, startZ);
+        topBeam.castShadow = true;
+        fg.add(topBeam);
+
+        // Glowing LED architectural facade trim line
+        const ledTrim = new THREE.Mesh(
+          new THREE.BoxGeometry(isAlongZ ? 0.82 : length + 0.5, 0.12, isAlongZ ? length + 0.5 : 0.82),
+          new THREE.MeshBasicMaterial({ color: 0x0369a1 })
+        );
+        ledTrim.position.set(startX, 0.85 + wallH + 0.05, startZ);
+        fg.add(ledTrim);
+
+        // Structural Steel H-Columns & Decorative Wood Slat Fins every 6.5m
+        const halfLen = length / 2;
+        for (let offset = -halfLen; offset <= halfLen; offset += 6.5) {
+          const col = new THREE.Mesh(new THREE.BoxGeometry(0.75, wallH + 0.2, 0.75), columnSteelMat);
+          const cx = isAlongZ ? startX : startX + offset;
+          const cz = isAlongZ ? startZ + offset : startZ;
+          col.position.set(cx, 0.85 + wallH / 2, cz);
+          col.castShadow = true;
+          fg.add(col);
+        }
+
+        perimeterGroup.add(fg);
+      }
+
+      // Build North, West, and East Exterior Curtain Walls
+      buildArchitecturalFacadeWall(buildingW, 0, northZ, false);
+      buildArchitecturalFacadeWall(buildingD, -buildingW / 2, centerZ, true);
+      buildArchitecturalFacadeWall(buildingD, buildingW / 2, centerZ, true);
+
+      // South Front Facade (Left Wing, Right Wing, and Grand Central Double Glass Entrance Lobby Canopy!)
+      const wingW = (buildingW - 16) / 2;
+      buildArchitecturalFacadeWall(wingW, -buildingW / 2 + wingW / 2, southZ, false);
+      buildArchitecturalFacadeWall(wingW, buildingW / 2 - wingW / 2, southZ, false);
+
+      // Grand South Entrance Canopy, Steps, & Automatic Sliding Glass Doors
+      const entranceCanopy = new THREE.Mesh(new THREE.BoxGeometry(18, 0.55, 6.0), columnSteelMat);
+      entranceCanopy.position.set(0, 0.85 + wallH - 0.2, southZ + 1.8);
+      entranceCanopy.castShadow = true;
+      perimeterGroup.add(entranceCanopy);
+
+      // Canopy support pillars
+      [-7.5, 7.5].forEach(px => {
+        const pCol = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.32, wallH), columnSteelMat);
+        pCol.position.set(px, 0.85 + wallH / 2, southZ + 4.2);
+        perimeterGroup.add(pCol);
+      });
+
+      // Entrance Wide Stairs
+      const step1 = new THREE.Mesh(new THREE.BoxGeometry(16, 0.28, 3.5), wallConcreteMat);
+      step1.position.set(0, 0.14, southZ + 3.0);
+      const step2 = new THREE.Mesh(new THREE.BoxGeometry(15, 0.56, 2.2), wallConcreteMat);
+      step2.position.set(0, 0.28, southZ + 2.2);
+      perimeterGroup.add(step1, step2);
+
+      // Sliding Glass Entrance Doors
+      [-3.2, 3.2].forEach(dx => {
+        const doorGlass = new THREE.Mesh(new THREE.BoxGeometry(3.8, 4.6, 0.16), glassCurtainMat);
+        doorGlass.position.set(dx, 0.85 + 2.3, southZ);
+        perimeterGroup.add(doorGlass);
+      });
+
+      // Monumental Signboard above Main Canopy
+      const hqSign = createTextSignMesh('TONHERMES AI HEADQUARTERS', 'CORPORATE SOFTWARE HOUSE & AI RESEARCH CAMPUS', '#06b6d4', 17.5, 2.5);
+      hqSign.position.set(0, 0.85 + wallH + 1.4, southZ + 2.2);
+      perimeterGroup.add(hqSign);
+
+      // Manicured Hedge Bushes along South Front Facade
+      const hedgeMat = new THREE.MeshLambertMaterial({ color: 0x15803d });
+      [-24, 24].forEach(hx => {
+        const hedge = new THREE.Mesh(new THREE.BoxGeometry(22, 1.2, 1.6), hedgeMat);
+        hedge.position.set(hx, 0.6, southZ + 2.4);
+        hedge.castShadow = true;
+        perimeterGroup.add(hedge);
+      });
+    }
+
+    // ============================================================================
+    // 6. RICH INTERIOR SHARED FACILITIES (RECEPTION LOBBY, BOARDROOM, CAFE, LOUNGE, POOL)
+    // ============================================================================
+    const sharedGroup = new THREE.Group();
+    hqGroup.add(sharedGroup);
+
+    // Reusable Ergonomic Office Chair Builder
+    function createDetailedChair(accentHex = '#0284c7') {
+      const cg = new THREE.Group();
+      const colMat = new THREE.MeshStandardMaterial({ color: accentHex, roughness: 0.4 });
+      const base = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.42, 0.08, 10), darkFrameMat);
+      base.position.y = 0.06;
+      const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.5), darkFrameMat);
+      pole.position.y = 0.32;
+      const seat = new THREE.Mesh(new THREE.BoxGeometry(0.95, 0.12, 0.95), colMat);
+      seat.position.y = 0.58;
+      const back = new THREE.Mesh(new THREE.BoxGeometry(0.90, 1.15, 0.14), darkFrameMat);
+      back.position.set(0, 1.20, -0.42);
+      const headRest = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.25, 0.14), colMat);
+      headRest.position.set(0, 1.88, -0.42);
+      // Armrests
+      [-0.48, 0.48].forEach(ax => {
+        const arm = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.35, 0.65), darkFrameMat);
+        arm.position.set(ax, 0.82, -0.05);
+        cg.add(arm);
+      });
+      cg.add(base, pole, seat, back, headRest);
+      return cg;
+    }
+
+    // Reusable Potted Plant Builder
+    function createDetailedPlant(scale = 1.0) {
+      const pg = new THREE.Group();
+      const pot = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.42 * scale, 0.30 * scale, 0.85 * scale, 14),
+        new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.5 })
+      );
+      pot.position.y = 0.42 * scale;
+      const soil = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.39 * scale, 0.39 * scale, 0.08 * scale, 12),
+        new THREE.MeshLambertMaterial({ color: 0x3e2723 })
+      );
+      soil.position.y = 0.83 * scale;
+      pg.add(pot, soil);
+
+      const leafMat = new THREE.MeshLambertMaterial({ color: 0x16a34a });
+      for (let i = 0; i < 6; i++) {
+        const angle = (i / 6) * Math.PI * 2;
+        const leaf = new THREE.Mesh(new THREE.SphereGeometry(0.38 * scale, 10, 8), leafMat);
+        leaf.scale.set(1.2, 0.45, 0.7);
+        leaf.position.set(Math.cos(angle) * 0.35 * scale, (1.15 + (i % 2) * 0.25) * scale, Math.sin(angle) * 0.35 * scale);
+        leaf.rotation.y = -angle;
+        leaf.rotation.z = 0.35;
+        pg.add(leaf);
+      }
+      const topLeaf = new THREE.Mesh(new THREE.DodecahedronGeometry(0.55 * scale), leafMat);
+      topLeaf.position.y = 1.45 * scale;
+      pg.add(topLeaf);
+      return pg;
+    }
+
+    // Reusable Bookshelf with Colored Books Builder
+    function createFilledBookshelf(width = 2.6, height = 3.6) {
+      const bg = new THREE.Group();
+      const frame = new THREE.Mesh(new THREE.BoxGeometry(width, height, 0.65), walnutWoodMat);
+      frame.position.y = height / 2;
+      frame.castShadow = true;
+      bg.add(frame);
+
+      const bookPalette = [0xef4444, 0x3b82f6, 0x10b981, 0xf59e0b, 0xec4899, 0x06b6d4, 0x64748b];
+      for (let sy = 0.7; sy < height - 0.3; sy += 0.85) {
+        // Shelf plank
+        const shelf = new THREE.Mesh(new THREE.BoxGeometry(width - 0.15, 0.08, 0.72), darkFrameMat);
+        shelf.position.set(0, sy, 0.03);
+        bg.add(shelf);
+
+        // Row of colorful 3D books on each shelf
+        for (let bx = -width / 2 + 0.35; bx < width / 2 - 0.35; bx += 0.24) {
+          if (Math.random() > 0.82) continue;
+          const bh = 0.45 + (Math.abs(Math.sin(bx * 12 + sy)) * 0.22);
+          const bCol = bookPalette[Math.floor(Math.abs(bx * 10 + sy * 5)) % bookPalette.length];
+          const book = new THREE.Mesh(
+            new THREE.BoxGeometry(0.18, bh, 0.52),
+            new THREE.MeshLambertMaterial({ color: bCol })
+          );
+          book.position.set(bx, sy + 0.04 + bh / 2, 0.12);
+          bg.add(book);
+        }
+      }
+      return bg;
+    }
+
+    function buildSharedFacilities() {
+      // ------------------------------------------------------------------------
+      // A. GRAND RECEPTION LOBBY (South Center Entrance: x = 0, z = +16)
+      // ------------------------------------------------------------------------
+      const lobbyRug = new THREE.Mesh(
+        new THREE.BoxGeometry(15, 0.05, 10),
+        new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.7 })
+      );
+      lobbyRug.position.set(0, 0.88, 16);
+      sharedGroup.add(lobbyRug);
+
+      // Curved Front Reception Desk (Dark Obsidian Slate & Walnut Wood)
+      const recDeskFront = new THREE.Mesh(
+        new THREE.BoxGeometry(7.2, 1.35, 1.2),
+        new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.4 })
+      );
+      recDeskFront.position.set(0, 1.55, 17.5);
+      recDeskFront.castShadow = true;
+      const recDeskTop = new THREE.Mesh(new THREE.BoxGeometry(7.6, 0.15, 1.5), walnutWoodMat);
+      recDeskTop.position.set(0, 2.25, 17.5);
+      const recLed = new THREE.Mesh(new THREE.BoxGeometry(7.3, 0.12, 1.24), new THREE.MeshBasicMaterial({ color: 0x06b6d4 }));
+      recLed.position.set(0, 1.55, 17.5);
+      sharedGroup.add(recDeskFront, recDeskTop, recLed);
+
+      // Receptionist Check-in iMac Monitors
+      [-1.8, 1.8].forEach(rx => {
+        const rMon = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.7, 0.08), darkFrameMat);
+        rMon.position.set(rx, 2.7, 17.5);
+        sharedGroup.add(rMon);
+      });
+
+      // Lobby Waiting Area Armchairs & Plants
+      [-5.2, 5.2].forEach(lx => {
+        const waitSofa = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.85, 2.2), new THREE.MeshStandardMaterial({ color: 0x334155 }));
+        waitSofa.position.set(lx, 1.3, 19.5);
+        sharedGroup.add(waitSofa);
+
+        const plant = createDetailedPlant(1.35);
+        plant.position.set(lx * 1.25, 0.88, 13.5);
+        sharedGroup.add(plant);
+      });
+
+      // ------------------------------------------------------------------------
+      // B. EXECUTIVE BOARDROOM (North Center: x = 0, z = -22)
+      // ------------------------------------------------------------------------
+      const boardroomFloor = new THREE.Mesh(
+        new THREE.BoxGeometry(17.5, 0.06, 11.5),
+        new THREE.MeshStandardMaterial({ map: sharedWoodTex, roughness: 0.45 })
+      );
+      boardroomFloor.position.set(0, 0.88, -22);
+      boardroomFloor.receiveShadow = true;
+      sharedGroup.add(boardroomFloor);
+
+      // Long Walnut & Glass Conference Table
+      const confTable = new THREE.Mesh(new THREE.BoxGeometry(11.0, 0.18, 3.4), walnutWoodMat);
+      confTable.position.set(0, 1.98, -22);
+      confTable.castShadow = true;
+      const confGlassInlay = new THREE.Mesh(
+        new THREE.BoxGeometry(9.2, 0.20, 1.4),
+        new THREE.MeshPhysicalMaterial({ color: 0x38bdf8, transparent: true, opacity: 0.5 })
+      );
+      confGlassInlay.position.set(0, 1.99, -22);
+      sharedGroup.add(confTable, confGlassInlay);
+
+      [-3.5, 0, 3.5].forEach(tx => {
+        const leg = new THREE.Mesh(new THREE.BoxGeometry(0.7, 1.05, 2.0), darkFrameMat);
+        leg.position.set(tx, 1.38, -22);
+        sharedGroup.add(leg);
+      });
+
+      // 10 Conference Chairs + Open Laptops on the Boardroom Table!
+      for (let i = 0; i < 5; i++) {
+        const cx = (i - 2) * 2.15;
+        // North row of chairs
+        const chairN = createDetailedChair('#0284c7');
+        chairN.position.set(cx, 0.88, -24.2);
+        sharedGroup.add(chairN);
+
+        // South row of chairs
+        const chairS = createDetailedChair('#0284c7');
+        chairS.position.set(cx, 0.88, -19.8);
+        chairS.rotation.y = Math.PI;
+        sharedGroup.add(chairS);
+
+        // Open Laptops on Conference Table
+        const laptopBase = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.04, 0.42), new THREE.MeshStandardMaterial({ color: 0x94a3b8 }));
+        laptopBase.position.set(cx, 2.10, -23.0);
+        const laptopScreen = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.4, 0.03), new THREE.MeshBasicMaterial({ color: 0x38bdf8 }));
+        laptopScreen.position.set(cx, 2.30, -23.2);
+        sharedGroup.add(laptopBase, laptopScreen);
+      }
+
+      // Giant Boardroom Wall Presentation Screen & Bookshelves
+      const boardSign = createTextSignMesh('EXECUTIVE BOARDROOM', 'LIVE SPRINT METRICS & ARCHITECTURE', '#38bdf8', 10.5, 2.6);
+      boardSign.position.set(0, 3.9, -30.4);
+      sharedGroup.add(boardSign);
+
+      [-7.2, 7.2].forEach(bx => {
+        const bShelf = createFilledBookshelf(2.4, 3.8);
+        bShelf.position.set(bx, 0.88, -30.2);
+        sharedGroup.add(bShelf);
+      });
+
+      // ------------------------------------------------------------------------
+      // C. BARISTA CAFETERIA & KITCHENETTE PANTRY (Center-West: x = -7.5, z = -3.5)
+      // ------------------------------------------------------------------------
+      const cafeFloor = new THREE.Mesh(
+        new THREE.BoxGeometry(13.5, 0.06, 12.5),
+        new THREE.MeshStandardMaterial({ map: sharedWoodTex, roughness: 0.4 })
+      );
+      cafeFloor.position.set(-7.5, 0.88, -3.5);
+      sharedGroup.add(cafeFloor);
+
+      // L-Shaped Kitchen & Espresso Bar Counter
+      const barCounter = new THREE.Mesh(new THREE.BoxGeometry(7.8, 1.35, 1.5), walnutWoodMat);
+      barCounter.position.set(-7.5, 1.55, -6.5);
+      barCounter.castShadow = true;
+      const barMarbleTop = new THREE.Mesh(new THREE.BoxGeometry(8.1, 0.14, 1.75), new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.4 }));
+      barMarbleTop.position.set(-7.5, 2.26, -6.5);
+      sharedGroup.add(barCounter, barMarbleTop);
+
+      // Double-Door Brushed Dark Steel Refrigerator & Vending Machine
+      const fridge = new THREE.Mesh(
+        new THREE.BoxGeometry(1.7, 3.4, 1.5),
+        new THREE.MeshStandardMaterial({ color: 0x475569, metalness: 0.65, roughness: 0.35 })
+      );
+      fridge.position.set(-12.6, 2.58, -7.8);
+      fridge.castShadow = true;
+      sharedGroup.add(fridge);
+
+      const vending = new THREE.Mesh(new THREE.BoxGeometry(1.6, 3.3, 1.4), new THREE.MeshStandardMaterial({ color: 0x1e293b }));
+      vending.position.set(-12.6, 2.53, -5.6);
+      const vendGlass = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 2.2), new THREE.MeshBasicMaterial({ color: 0x0284c7 }));
+      vendGlass.position.set(-11.79, 2.7, -5.6);
+      vendGlass.rotation.y = Math.PI / 2;
+      sharedGroup.add(vending, vendGlass);
+
+      // Espresso Machine & Glass Pastry Display on Counter
+      const espresso = new THREE.Mesh(new THREE.BoxGeometry(1.3, 0.9, 0.9), new THREE.MeshStandardMaterial({ color: 0x991b1b, metalness: 0.5 }));
+      espresso.position.set(-9.5, 2.75, -6.5);
+      const pastryCase = new THREE.Mesh(
+        new THREE.BoxGeometry(1.8, 0.85, 1.0),
+        new THREE.MeshPhysicalMaterial({ color: 0xd97706, transparent: true, opacity: 0.40 })
+      );
+      pastryCase.position.set(-5.8, 2.75, -6.5);
+      sharedGroup.add(espresso, pastryCase);
+
+      // 4 High Barstools in front of the Coffee Counter
+      for (let i = 0; i < 4; i++) {
+        const sx = -10.2 + i * 1.8;
+        const stoolPole = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.22, 1.05, 10), darkFrameMat);
+        stoolPole.position.set(sx, 1.4, -5.0);
+        const stoolSeat = new THREE.Mesh(new THREE.CylinderGeometry(0.36, 0.36, 0.12, 14), new THREE.MeshLambertMaterial({ color: 0xb45309 }));
+        stoolSeat.position.set(sx, 1.95, -5.0);
+        sharedGroup.add(stoolPole, stoolSeat);
+      }
+
+      // 2 Round Cafe Dining Tables with Chairs
+      [-10.0, -5.0].forEach(tx => {
+        const cTable = new THREE.Mesh(new THREE.CylinderGeometry(1.25, 1.25, 0.1, 20), new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.5 }));
+        cTable.position.set(tx, 1.9, -0.5);
+        const cLeg = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.4, 1.0, 12), darkFrameMat);
+        cLeg.position.set(tx, 1.38, -0.5);
+        sharedGroup.add(cTable, cLeg);
+      });
+
+      const pantrySign = createTextSignMesh('BARISTA CAFE & PANTRY', 'ARTISAN COFFEE, REFRIGERATOR & DINING', '#f59e0b', 7.5, 1.4);
+      pantrySign.position.set(-7.5, 4.1, -9.2);
+      sharedGroup.add(pantrySign);
+
+      // ------------------------------------------------------------------------
+      // D. VIP CHILL LOUNGE, TV & PING-PONG RECREATION ZONE (Center-East: x = +7.5, z = -3.5)
+      // ------------------------------------------------------------------------
+      const loungeFloor = new THREE.Mesh(
+        new THREE.BoxGeometry(13.5, 0.06, 12.5),
+        new THREE.MeshStandardMaterial({ color: 0x1e1b4b, roughness: 0.7 })
+      );
+      loungeFloor.position.set(7.5, 0.88, -3.5);
+      sharedGroup.add(loungeFloor);
+
+      // L-Shaped Plush Sectional Sofa with Throw Pillows
+      const sofaMat = new THREE.MeshStandardMaterial({ color: 0x2563eb, roughness: 0.55 });
+      const sofaSeat = new THREE.Mesh(new THREE.BoxGeometry(6.8, 0.55, 2.2), sofaMat);
+      sofaSeat.position.set(7.5, 1.16, -6.2);
+      sofaSeat.castShadow = true;
+      const sofaBack = new THREE.Mesh(new THREE.BoxGeometry(6.8, 1.35, 0.5), sofaMat);
+      sofaBack.position.set(7.5, 1.68, -7.2);
+      const sofaChaise = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.55, 3.8), sofaMat);
+      sofaChaise.position.set(11.8, 1.16, -5.4);
+      sharedGroup.add(sofaSeat, sofaBack, sofaChaise);
+
+      // Colorful Throw Cushions on Sofa
+      [0xf59e0b, 0x10b981, 0xec4899].forEach((pCol, idx) => {
+        const pillow = new THREE.Mesh(new THREE.BoxGeometry(0.65, 0.55, 0.25), new THREE.MeshLambertMaterial({ color: pCol }));
+        pillow.position.set(5.2 + idx * 2.1, 1.62, -6.75);
+        pillow.rotation.z = 0.18;
+        sharedGroup.add(pillow);
+      });
+
+      // Glass Coffee Table + Media Console + 75" Smart TV
+      const coffeeTable = new THREE.Mesh(
+        new THREE.CylinderGeometry(1.5, 1.5, 0.12, 24),
+        new THREE.MeshPhysicalMaterial({ color: 0x38bdf8, transparent: true, opacity: 0.65 })
+      );
+      coffeeTable.position.set(7.5, 1.38, -3.4);
+      sharedGroup.add(coffeeTable);
+
+      // Recreation Ping-Pong Table (South side of Lounge: x = 7.5, z = +0.5)
+      const pingPongTop = new THREE.Mesh(
+        new THREE.BoxGeometry(4.2, 0.12, 2.4),
+        new THREE.MeshStandardMaterial({ color: 0x0284c7, roughness: 0.3 })
+      );
+      pingPongTop.position.set(7.5, 1.85, 0.4);
+      pingPongTop.castShadow = true;
+      const ppNet = new THREE.Mesh(
+        new THREE.BoxGeometry(0.06, 0.32, 2.5),
+        new THREE.MeshBasicMaterial({ color: 0xf8fafc, wireframe: true })
+      );
+      ppNet.position.set(7.5, 2.05, 0.4);
+      const ppLeg1 = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.95, 1.8), darkFrameMat);
+      ppLeg1.position.set(6.0, 1.35, 0.4);
+      const ppLeg2 = ppLeg1.clone();
+      ppLeg2.position.set(9.0, 1.35, 0.4);
+      sharedGroup.add(pingPongTop, ppNet, ppLeg1, ppLeg2);
+
+      // ------------------------------------------------------------------------
+      // E. OUTDOOR RESORT SWIMMING POOL & SUN DECK (South Courtyard: x = -11, z = 36)
+      // ------------------------------------------------------------------------
+      const sunDeck = new THREE.Mesh(
+        new THREE.BoxGeometry(18.0, 0.22, 12.0),
+        new THREE.MeshStandardMaterial({ map: sharedWoodTex, roughness: 0.55 })
+      );
+      sunDeck.position.set(-11.0, 0.11, 36.0);
+      sunDeck.receiveShadow = true;
+      sharedGroup.add(sunDeck);
+
+      const poolBorder = new THREE.Mesh(
+        new THREE.BoxGeometry(12.5, 0.48, 8.2),
+        new THREE.MeshStandardMaterial({ color: 0x0284c7, roughness: 0.35 })
+      );
+      poolBorder.position.set(-11.0, 0.25, 36.0);
+      sharedGroup.add(poolBorder);
+
+      window.poolWaterMesh = new THREE.Mesh(
+        new THREE.BoxGeometry(11.6, 0.42, 7.3),
+        new THREE.MeshPhysicalMaterial({
+          color: 0x38bdf8,
+          transparent: true,
+          opacity: 0.80,
+          roughness: 0.06
+        })
+      );
+      window.poolWaterMesh.position.set(-11.0, 0.32, 36.0);
+      sharedGroup.add(window.poolWaterMesh);
+
+      // Poolside Sun Loungers & Resort Parasol Umbrella
+      [-3.2, 3.2].forEach(lz => {
+        const lounger = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.32, 0.95), new THREE.MeshLambertMaterial({ color: 0x334155 }));
+        lounger.position.set(-3.2, 0.38, 36.0 + lz);
+        sharedGroup.add(lounger);
+      });
+      const umbrellaPole = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 3.4), darkFrameMat);
+      umbrellaPole.position.set(-3.2, 1.8, 36.0);
+      const umbrellaCanopy = new THREE.Mesh(new THREE.ConeGeometry(2.2, 0.85, 12), new THREE.MeshLambertMaterial({ color: 0xf97316 }));
+      umbrellaCanopy.position.set(-3.2, 3.5, 36.0);
+      sharedGroup.add(umbrellaPole, umbrellaCanopy);
+    }
+    buildSharedFacilities();
+
+    // ============================================================================
+    // 7. HYPER-DETAILED PRIVATE OFFICE SUITE BUILDER (RUANGAN PRIBADI TIAP KARYAWAN)
+    // ============================================================================
+    function buildPrivateRoomForAgent(id, agent, indexOffset) {
+      if (roomMeshes[id]) {
+        roomsContainerGroup.remove(roomMeshes[id]);
+        delete roomMeshes[id];
+      }
+
+      const rIdx = typeof agent.room_index === 'number' ? agent.room_index : indexOffset;
+      const layout = getPrivateRoomLayout(rIdx);
+      const { roomW, roomD, centerX, centerZ, doorDir, deskX, deskZ, chairX, chairZ } = layout;
+
+      const rg = new THREE.Group();
+      const accentHex = agent.color || '#06b6d4';
+      const accentCol = new THREE.Color(accentHex);
+
+      // 1. Warm Hardwood Parquet Floor inside every Private Office Room!
+      const woodRoomFloor = new THREE.Mesh(
+        new THREE.BoxGeometry(roomW - 0.3, 0.07, roomD - 0.3),
+        woodFloorMat
+      );
+      woodRoomFloor.position.set(centerX, 0.88, centerZ);
+      woodRoomFloor.receiveShadow = true;
+      rg.add(woodRoomFloor);
+
+      // Woven Area Rug under Executive Desk
+      const rug = new THREE.Mesh(
+        new THREE.BoxGeometry(7.5, 0.08, 5.4),
+        new THREE.MeshStandardMaterial({ color: accentCol, roughness: 0.85, transparent: true, opacity: 0.28 })
+      );
+      rug.position.set(deskX, 0.89, deskZ - 0.3);
+      rg.add(rug);
+
+      // 2. Room Partition Walls with Wood Slat Accents & Mullioned Glass Front
+      const wallH = 4.6;
+      const wallY = 0.85 + wallH / 2;
+      const partWallMat = new THREE.MeshStandardMaterial({ color: 0x263246, roughness: 0.55 });
+
+      const nWall = new THREE.Mesh(new THREE.BoxGeometry(roomW, wallH, 0.28), partWallMat);
+      nWall.position.set(centerX, wallY, centerZ - roomD / 2);
+      nWall.castShadow = true;
+      const sWall = new THREE.Mesh(new THREE.BoxGeometry(roomW, wallH, 0.28), partWallMat);
+      sWall.position.set(centerX, wallY, centerZ + roomD / 2);
+      sWall.castShadow = true;
+      rg.add(nWall, sWall);
+
+      // Decorative Acoustic Wood Slats on inside back wall of the room
+      for (let wx = centerX - 6.5; wx <= centerX + 6.5; wx += 0.85) {
+        const slat = new THREE.Mesh(new THREE.BoxGeometry(0.22, wallH - 0.4, 0.12), woodSlatMat);
+        slat.position.set(wx, wallY, centerZ - roomD / 2 + 0.18);
+        rg.add(slat);
+      }
+
+      // Glass Front Partition facing Central Corridor with Open Doorway & Mullion Frames
+      const frontX = centerX + doorDir * (roomW / 2);
+      [-3.8, 3.8].forEach(gz => {
+        const glassP = new THREE.Mesh(new THREE.BoxGeometry(0.18, wallH, 4.2), glassCurtainMat);
+        glassP.position.set(frontX, wallY, centerZ + gz);
+        // Horizontal black aluminum window mullions
+        const mullion1 = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.12, 4.2), darkFrameMat);
+        mullion1.position.set(frontX, 2.2, centerZ + gz);
+        const mullion2 = mullion1.clone();
+        mullion2.position.y = 4.0;
+        rg.add(glassP, mullion1, mullion2);
+      });
+
+      // Colored Doorway Frame & Overhead Accent Beam
+      const frameColorMat = new THREE.MeshStandardMaterial({ color: accentCol, roughness: 0.3, metalness: 0.4 });
+      [-1.7, 1.7].forEach(dz => {
+        const dPillar = new THREE.Mesh(new THREE.BoxGeometry(0.32, wallH, 0.32), frameColorMat);
+        dPillar.position.set(frontX, wallY, centerZ + dz);
+        rg.add(dPillar);
+      });
+      const doorHeader = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.38, roomD), frameColorMat);
+      doorHeader.position.set(frontX, 0.85 + wallH + 0.18, centerZ);
+      rg.add(doorHeader);
+
+      // 3. 3D Room Nameplate Signs (Corridor Doorway + Back Wall)
+      const roomNumStr = `ROOM ${String(rIdx + 1).padStart(2, '0')} • ${agent.badge || 'AGENT'}`;
+      const signMesh = createTextSignMesh(agent.name || id, `${roomNumStr} — ${agent.role || ''}`, accentHex, 7.8, 1.5);
+      signMesh.position.set(frontX + doorDir * 0.2, 0.85 + wallH + 0.98, centerZ);
+      signMesh.rotation.y = doorDir === 1 ? Math.PI / 2 : -Math.PI / 2;
+      rg.add(signMesh);
+
+      const innerSign = createTextSignMesh(`${roomNumStr}: ${agent.name}`, agent.role || 'AI Specialist', accentHex, 8.8, 1.7);
+      innerSign.position.set(centerX, 3.75, centerZ - roomD / 2 + 0.28);
+      rg.add(innerSign);
+
+      // 4. L-SHAPED EXECUTIVE WORKSTATION DESK + CREDENZA + PC TOWER + DUAL CODE MONITORS + DESK LAMP + MUG
+      const deskTop = new THREE.Mesh(new THREE.BoxGeometry(5.0, 0.16, 2.2), walnutWoodMat);
+      deskTop.position.set(deskX, 2.02, deskZ);
+      deskTop.castShadow = true;
+      rg.add(deskTop);
+
+      // L-Shape Side Credenza Return
+      const credenza = new THREE.Mesh(new THREE.BoxGeometry(1.6, 1.15, 3.6), walnutWoodMat);
+      credenza.position.set(deskX + doorDir * 2.1, 1.44, deskZ - 0.8);
+      credenza.castShadow = true;
+      rg.add(credenza);
+
+      // Under-Desk Drawer Cabinet Pedestal
+      const drawerCab = new THREE.Mesh(new THREE.BoxGeometry(1.1, 1.1, 1.9), darkFrameMat);
+      drawerCab.position.set(deskX - doorDir * 1.8, 1.42, deskZ);
+      rg.add(drawerCab);
+
+      // Gaming / Workstation PC Tower on Desk with Glowing RGB Core
+      const pcTower = new THREE.Mesh(new THREE.BoxGeometry(0.55, 1.05, 1.0), darkFrameMat);
+      pcTower.position.set(deskX - doorDir * 2.0, 2.62, deskZ + 0.3);
+      const pcRgb = new THREE.Mesh(new THREE.BoxGeometry(0.58, 0.85, 0.15), new THREE.MeshBasicMaterial({ color: accentCol }));
+      pcRgb.position.set(deskX - doorDir * 2.0, 2.62, deskZ - 0.15);
+      rg.add(pcTower, pcRgb);
+
+      // Dual Ultra-Wide Monitors with Real Procedural Code Screen Texture!
+      const codeTex = createMonitorCodeTexture(accentHex);
+      const codeScreenMat = new THREE.MeshBasicMaterial({ map: codeTex });
+      [-1.0, 0.95].forEach(offsetX => {
+        const stand = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.12, 0.48), darkFrameMat);
+        stand.position.set(deskX + offsetX, 2.28, deskZ + 0.42);
+        const monitor = new THREE.Mesh(new THREE.BoxGeometry(1.82, 1.02, 0.08), darkFrameMat);
+        monitor.position.set(deskX + offsetX, 2.72, deskZ + 0.42);
+        const screen = new THREE.Mesh(new THREE.PlaneGeometry(1.72, 0.92), codeScreenMat);
+        screen.position.set(deskX + offsetX, 2.72, deskZ + 0.37);
+        screen.rotation.y = Math.PI;
+        rg.add(stand, monitor, screen);
+      });
+
+      // Keyboard, Mousepad, Desk Lamp & Coffee Mug on Desk
+      const keyboard = new THREE.Mesh(new THREE.BoxGeometry(0.95, 0.04, 0.35), new THREE.MeshBasicMaterial({ color: 0x334155 }));
+      keyboard.position.set(deskX, 2.12, deskZ - 0.38);
+      rg.add(keyboard);
+
+      // Warm Architect Desk Lamp
+      const lampBase = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.22, 0.08, 12), darkFrameMat);
+      lampBase.position.set(deskX + 1.9, 2.14, deskZ - 0.4);
+      const lampStem = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.85), darkFrameMat);
+      lampStem.position.set(deskX + 1.9, 2.55, deskZ - 0.4);
+      const lampHead = new THREE.Mesh(new THREE.ConeGeometry(0.25, 0.3, 12), new THREE.MeshBasicMaterial({ color: 0xd97706 }));
+      lampHead.position.set(deskX + 1.8, 2.95, deskZ - 0.4);
+      rg.add(lampBase, lampStem, lampHead);
+
+      // Coffee Mug on Desk
+      const mug = new THREE.Mesh(new THREE.CylinderGeometry(0.10, 0.09, 0.22, 12), new THREE.MeshLambertMaterial({ color: 0x475569 }));
+      mug.position.set(deskX - 1.35, 2.20, deskZ - 0.45);
+      rg.add(mug);
+
+      // 5. Ergonomic Executive Chair behind Desk + 2 Visitor Chairs in front of Desk!
+      const execChair = createDetailedChair(accentHex);
+      execChair.position.set(chairX, 0.88, chairZ - 0.15);
+      rg.add(execChair);
+
+      [-1.1, 1.1].forEach(vx => {
+        const guestChair = createDetailedChair('#334155');
+        guestChair.position.set(deskX + vx, 0.88, deskZ + 1.85);
+        guestChair.rotation.y = Math.PI;
+        rg.add(guestChair);
+      });
+
+      // 6. Filled Wooden Bookshelf, Private Server Node, Kanban Whiteboard & Corner Sofa inside the Room!
+      const outerWallX = centerX - doorDir * (roomW / 2 - 1.2);
+
+      // Filled Wooden Bookshelf with colorful 3D books
+      const bookShelf = createFilledBookshelf(3.4, 3.8);
+      bookShelf.position.set(outerWallX, 0.88, centerZ + 2.2);
+      bookShelf.rotation.y = doorDir === 1 ? Math.PI / 2 : -Math.PI / 2;
+      rg.add(bookShelf);
+
+      // High-Density Server Rack in back corner of room
+      const rack = new THREE.Mesh(new THREE.BoxGeometry(1.5, 3.9, 1.8), darkFrameMat);
+      rack.position.set(outerWallX, 2.8, centerZ - 3.6);
+      rack.castShadow = true;
+      rg.add(rack);
+
+      for (let ly = 1.5; ly <= 4.2; ly += 0.55) {
+        const led = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.09, 1.35), new THREE.MeshBasicMaterial({ color: accentCol }));
+        led.position.set(outerWallX + doorDir * 0.78, ly, centerZ - 3.6);
+        rg.add(led);
+      }
+
+      // Kanban Strategy Dark Glass Board on South Wall of Room with sticky notes
+      const wbFrame = new THREE.Mesh(new THREE.BoxGeometry(4.2, 2.1, 0.12), darkFrameMat);
+      wbFrame.position.set(centerX + doorDir * 2.5, 3.1, centerZ + roomD / 2 - 0.22);
+      const wbBoard = new THREE.Mesh(new THREE.PlaneGeometry(3.9, 1.85), new THREE.MeshBasicMaterial({ color: 0x111827 }));
+      wbBoard.position.set(centerX + doorDir * 2.5, 3.1, centerZ + roomD / 2 - 0.30);
+      wbBoard.rotation.y = Math.PI;
+      rg.add(wbFrame, wbBoard);
+
+      // Sticky notes on dark glass board
+      [0xd97706, 0x0284c7, 0xe11d48, 0x059669].forEach((sCol, sIdx) => {
+        const sticky = new THREE.Mesh(new THREE.PlaneGeometry(0.55, 0.55), new THREE.MeshBasicMaterial({ color: sCol }));
+        sticky.position.set(centerX + doorDir * 2.5 - 1.1 + sIdx * 0.75, 3.2, centerZ + roomD / 2 - 0.32);
+        sticky.rotation.y = Math.PI;
+        rg.add(sticky);
+      });
+
+      // Lush Potted Monstera Plant inside Room
+      const roomPlant = createDetailedPlant(1.15);
+      roomPlant.position.set(centerX + doorDir * (roomW / 2 - 1.4), 0.88, centerZ - roomD / 2 + 1.4);
+      rg.add(roomPlant);
+
+      roomsContainerGroup.add(rg);
+      roomMeshes[id] = rg;
+    }
+
+    // ============================================================================
+    // 8. ARTICULATED 3D HUMAN CHARACTER BUILDER (REAL HUMAN ANATOMY & OUTFIT)
+    // ============================================================================
+    function createHumanCharacter(id, agent) {
+      if (agentMeshes[id]) {
+        scene.remove(agentMeshes[id].group);
+        const hitIdx = raycastMeshes.indexOf(agentMeshes[id].hitBox);
+        if (hitIdx !== -1) raycastMeshes.splice(hitIdx, 1);
+      }
+
+      const group = new THREE.Group();
+      group.name = id;
+
+      const humanRoot = new THREE.Group();
+      humanRoot.scale.set(1.38, 1.38, 1.38);
+      group.add(humanRoot);
+
+      const suitColor = new THREE.Color(agent.color || '#06b6d4');
+      const skinColor = new THREE.Color(agent.skin_color || '#f3c6a5');
+      const hairColors = {
+        spiky: 0x1e293b,
+        ponytail: 0x3b2314,
+        bun: 0x27272a,
+        exec: 0x0f172a,
+        short: 0x451a03
+      };
+      const hairStyle = agent.hair_style || 'spiky';
+      const hairColor = hairColors[hairStyle] || 0x1e293b;
+
+      const skinMat = new THREE.MeshStandardMaterial({ color: skinColor, roughness: 0.45, metalness: 0.05 });
+      const suitMat = new THREE.MeshStandardMaterial({ color: suitColor, roughness: 0.4, metalness: 0.15 });
+      const shirtMat = new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.5 });
+      const pantsMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.6 });
+      const shoeMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.4 });
+      const hairMat = new THREE.MeshStandardMaterial({ color: hairColor, roughness: 0.5 });
+
+      // Legs & Shoes
+      const pelvis = new THREE.Mesh(new THREE.BoxGeometry(0.54, 0.24, 0.32), pantsMat);
+      pelvis.position.y = 0.78;
+      humanRoot.add(pelvis);
+
+      function buildLeg(sideX) {
+        const legPivot = new THREE.Group();
+        legPivot.position.set(sideX, 0.76, 0);
+
+        const thigh = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.10, 0.68, 14), pantsMat);
+        thigh.position.y = -0.34;
+        thigh.castShadow = true;
+        legPivot.add(thigh);
+
+        const shoe = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.14, 0.36), shoeMat);
+        shoe.position.set(0, -0.68, 0.06);
+        const sole = new THREE.Mesh(new THREE.BoxGeometry(0.23, 0.04, 0.37), shirtMat);
+        sole.position.set(0, -0.74, 0.06);
+        legPivot.add(shoe, sole);
+
+        return legPivot;
+      }
+
+      const leftLegPivot = buildLeg(-0.15);
+      const rightLegPivot = buildLeg(0.15);
+      humanRoot.add(leftLegPivot, rightLegPivot);
+
+      // Torso, Blazer, Collar & Badge
+      const torsoGroup = new THREE.Group();
+      torsoGroup.position.y = 1.18;
+      humanRoot.add(torsoGroup);
+
+      const torsoMesh = new THREE.Mesh(new THREE.BoxGeometry(0.60, 0.72, 0.34), suitMat);
+      torsoMesh.castShadow = true;
+      torsoGroup.add(torsoMesh);
+
+      const shirtFront = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.66, 0.35), shirtMat);
+      shirtFront.position.set(0, 0.02, 0.005);
+      torsoGroup.add(shirtFront);
+
+      const badgeCard = new THREE.Mesh(
+        new THREE.BoxGeometry(0.14, 0.18, 0.02),
+        new THREE.MeshBasicMaterial({ color: 0x38bdf8 })
+      );
+      badgeCard.position.set(0.14, 0.08, 0.18);
+      torsoGroup.add(badgeCard);
+
+      // Arms & Hands
+      function buildArm(sideX) {
+        const armPivot = new THREE.Group();
+        armPivot.position.set(sideX, 0.28, 0);
+
+        const shoulder = new THREE.Mesh(new THREE.SphereGeometry(0.12, 12, 12), suitMat);
+        armPivot.add(shoulder);
+
+        const armMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.10, 0.085, 0.56, 14), suitMat);
+        armMesh.position.y = -0.28;
+        armMesh.castShadow = true;
+        armPivot.add(armMesh);
+
+        const hand = new THREE.Mesh(new THREE.SphereGeometry(0.095, 12, 12), skinMat);
+        hand.position.y = -0.60;
+        armPivot.add(hand);
+
+        return armPivot;
+      }
+
+      const leftArmPivot = buildArm(-0.39);
+      const rightArmPivot = buildArm(0.39);
+      torsoGroup.add(leftArmPivot, rightArmPivot);
+
+      // Head, Face, Hair & Accessories
+      const headGroup = new THREE.Group();
+      headGroup.position.y = 0.44;
+      torsoGroup.add(headGroup);
+
+      const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.12, 0.18, 14), skinMat);
+      neck.position.y = 0.06;
+      headGroup.add(neck);
+
+      const headMesh = new THREE.Mesh(new THREE.SphereGeometry(0.30, 24, 24), skinMat);
+      headMesh.scale.set(0.95, 1.06, 0.95);
+      headMesh.position.y = 0.34;
+      headMesh.castShadow = true;
+      headGroup.add(headMesh);
+
+      const leftEar = new THREE.Mesh(new THREE.SphereGeometry(0.065, 10, 10), skinMat);
+      leftEar.position.set(-0.28, 0.34, 0);
+      const rightEar = leftEar.clone();
+      rightEar.position.set(0.28, 0.34, 0);
+      headGroup.add(leftEar, rightEar);
+
+      const eyeWhiteMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+      const pupilMat = new THREE.MeshBasicMaterial({ color: 0x0f172a });
+
+      [-0.10, 0.10].forEach(ex => {
+        const sclera = new THREE.Mesh(new THREE.SphereGeometry(0.048, 12, 12), eyeWhiteMat);
+        sclera.position.set(ex, 0.36, 0.25);
+        const pupil = new THREE.Mesh(new THREE.SphereGeometry(0.028, 10, 10), pupilMat);
+        pupil.position.set(ex, 0.36, 0.285);
+        const brow = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.022, 0.02), hairMat);
+        brow.position.set(ex, 0.43, 0.265);
+        headGroup.add(sclera, pupil, brow);
+      });
+
+      const nose = new THREE.Mesh(new THREE.SphereGeometry(0.032, 10, 10), skinMat);
+      nose.position.set(0, 0.31, 0.29);
+      const mouth = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.022, 0.02), new THREE.MeshBasicMaterial({ color: 0xb91c1c }));
+      mouth.position.set(0, 0.23, 0.27);
+      headGroup.add(nose, mouth);
+
+      const hairCap = new THREE.Mesh(
+        new THREE.SphereGeometry(0.315, 20, 16, 0, Math.PI * 2, 0, Math.PI * 0.58),
+        hairMat
+      );
+      hairCap.position.y = 0.37;
+      hairCap.rotation.x = -0.15;
+      headGroup.add(hairCap);
+
+      if (hairStyle === 'spiky') {
+        for (let i = -2; i <= 2; i++) {
+          const spike = new THREE.Mesh(new THREE.ConeGeometry(0.075, 0.22, 8), hairMat);
+          spike.position.set(i * 0.07, 0.67, 0.06 - Math.abs(i) * 0.03);
+          spike.rotation.z = -i * 0.2;
+          spike.rotation.x = 0.25;
+          headGroup.add(spike);
+        }
+      } else if (hairStyle === 'ponytail') {
+        const tail = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.11, 0.42, 12), hairMat);
+        tail.position.set(0, 0.30, -0.32);
+        tail.rotation.x = 0.45;
+        const bangs = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.10, 0.12), hairMat);
+        bangs.position.set(0, 0.54, 0.21);
+        headGroup.add(tail, bangs);
+      } else if (hairStyle === 'bun') {
+        const bun = new THREE.Mesh(new THREE.SphereGeometry(0.14, 14, 14), hairMat);
+        bun.position.set(0, 0.70, -0.08);
+        headGroup.add(bun);
+      } else if (hairStyle === 'exec') {
+        const sidePart = new THREE.Mesh(new THREE.BoxGeometry(0.44, 0.12, 0.32), hairMat);
+        sidePart.position.set(0.03, 0.60, 0.06);
+        sidePart.rotation.z = -0.12;
+        headGroup.add(sidePart);
+      }
+
+      const accessory = agent.accessory || 'headphones';
+      if (accessory === 'headphones') {
+        const bandMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, metalness: 0.8, roughness: 0.2 });
+        const glowMat = new THREE.MeshBasicMaterial({ color: suitColor });
+        const cupL = new THREE.Mesh(new THREE.CylinderGeometry(0.10, 0.10, 0.08, 16), bandMat);
+        cupL.rotation.z = Math.PI / 2;
+        cupL.position.set(-0.31, 0.35, 0);
+        const cupR = cupL.clone();
+        cupR.position.set(0.31, 0.35, 0);
+        const ringL = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.09, 16), glowMat);
+        ringL.rotation.z = Math.PI / 2;
+        ringL.position.set(-0.315, 0.35, 0);
+        const ringR = ringL.clone();
+        ringR.position.set(0.315, 0.35, 0);
+        headGroup.add(cupL, cupR, ringL, ringR);
+      } else if (accessory === 'glasses') {
+        const frameM = new THREE.MeshBasicMaterial({ color: 0x090d16 });
+        const glassL = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.08, 0.03), frameM);
+        glassL.position.set(-0.10, 0.36, 0.29);
+        const glassR = glassL.clone();
+        glassR.position.set(0.10, 0.36, 0.29);
+        const bridge = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.02, 0.03), frameM);
+        bridge.position.set(0, 0.37, 0.29);
+        headGroup.add(glassL, glassR, bridge);
+      }
+
+      const ring = new THREE.Mesh(
+        new THREE.RingGeometry(0.85, 1.05, 32),
+        new THREE.MeshBasicMaterial({ color: 0x38bdf8, side: THREE.DoubleSide, transparent: true, opacity: 0 })
+      );
+      ring.rotation.x = -Math.PI / 2;
+      ring.position.y = 0.05;
+      group.add(ring);
+
+      const hitBox = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.95, 0.95, 2.8, 12),
+        new THREE.MeshBasicMaterial({ visible: false })
+      );
+      hitBox.position.y = 1.4;
+      hitBox.userData = { agentId: id };
+      group.add(hitBox);
+      raycastMeshes.push(hitBox);
+
+      const initTarget = getTargetForAgent(id, agent);
+      group.position.set(initTarget.x, initTarget.y, initTarget.z);
+      group.rotation.y = initTarget.rotY || 0;
+      scene.add(group);
+
+      agentMeshes[id] = {
+        group,
+        humanRoot,
+        torsoGroup,
+        headGroup,
+        leftArmPivot,
+        rightArmPivot,
+        leftLegPivot,
+        rightLegPivot,
+        pelvis,
+        ring,
+        hitBox
+      };
+      botTargets[id] = initTarget;
+      createOrUpdateFloatingCard(id, agent);
+    }
+
+    // ============================================================================
+    // 9. FLOATING HTML SPEECH BUBBLES & NAMEPLATES
+    // ============================================================================
+    function createOrUpdateFloatingCard(id, agent) {
+      let card = floatingCards[id];
+      if (!card) {
+        card = document.createElement('div');
+        card.className = 'agent-floating-card';
+        card.onclick = (e) => {
+          e.stopPropagation();
+          selectAgent(id, true);
+        };
+        labelsContainer.appendChild(card);
+        floatingCards[id] = card;
+      }
+
+      const rIdx = typeof agent.room_index === 'number' ? agent.room_index : 0;
+      const roomTag = `R.${String(rIdx + 1).padStart(2, '0')}`;
+      const isWorking = agent.status === 'working';
+      const dotColor = isWorking ? '#10b981' : '#f59e0b';
+      const dialogueText = agent.dialogue || agent.current_task || 'Siap bertugas';
+
+      card.innerHTML = `
+        <div class="agent-speech-bubble">"${dialogueText}"</div>
+        <div class="agent-name-pill">
+          <span style="width:8px;height:8px;border-radius:50%;background:${dotColor};display:inline-block;"></span>
+          <span>${agent.name || id}</span>
+          <span style="font-size:10px;padding:1px 5px;border-radius:4px;background:${agent.color || '#06b6d4'}33;color:#e2e8f0;border:1px solid ${agent.color || '#06b6d4'};font-family:monospace;">${roomTag}</span>
+        </div>
+      `;
+
+      card.classList.toggle('is-selected', id === activeAgentId);
+    }
+
+    function updateFloatingCardsPositions() {
+      const halfW = window.innerWidth / 2;
+      const halfH = window.innerHeight / 2;
+      const tempV = new THREE.Vector3();
+
+      Object.keys(agentMeshes).forEach(id => {
+        const bot = agentMeshes[id];
+        const card = floatingCards[id];
+        if (!bot || !card) return;
+
+        tempV.copy(bot.group.position);
+        tempV.y += 2.75;
+        tempV.project(camera);
+
+        if (tempV.z > 1) {
+          card.style.display = 'none';
+          return;
+        }
+        const x = (tempV.x * halfW) + halfW;
+        const y = -(tempV.y * halfH) + halfH;
+        card.style.display = 'flex';
+        card.style.left = `${x}px`;
+        card.style.top = `${y}px`;
+      });
+    }
+
+    // ============================================================================
+    // 10. SYNC ALL AGENTS, ROOMS & UI TABS
+    // ============================================================================
+    function syncAllAgents(incomingAgents) {
+      const ids = Object.keys(incomingAgents);
+      rebuildBuildingPerimeter(ids.length);
+
+      Object.keys(agentsState).forEach(oldId => {
+        if (!incomingAgents[oldId]) {
+          if (agentMeshes[oldId]) {
+            scene.remove(agentMeshes[oldId].group);
+            delete agentMeshes[oldId];
+          }
+          if (roomMeshes[oldId]) {
+            roomsContainerGroup.remove(roomMeshes[oldId]);
+            delete roomMeshes[oldId];
+          }
+          if (floatingCards[oldId]) {
+            floatingCards[oldId].remove();
+            delete floatingCards[oldId];
+          }
+          delete botTargets[oldId];
+        }
+      });
+
+      agentsState = incomingAgents;
+      if (!agentsState[activeAgentId] && ids.length > 0) {
+        activeAgentId = ids[0];
+      }
+
+      ids.forEach((id, idx) => {
+        const ag = agentsState[id];
+        if (typeof ag.room_index !== 'number') ag.room_index = idx;
+
+        if (!roomMeshes[id]) {
+          buildPrivateRoomForAgent(id, ag, idx);
+        }
+        if (!agentMeshes[id]) {
+          createHumanCharacter(id, ag);
+        } else {
+          createOrUpdateFloatingCard(id, ag);
+        }
+        botTargets[id] = getTargetForAgent(id, ag, idx);
+      });
+
+      const badgeCount = document.getElementById('agent-count-badge');
+      if (badgeCount) badgeCount.textContent = `${ids.length} AGENTS • ${ids.length} RUANGAN`;
+
+      renderAgentTabs();
+      updateSelectionHighlight();
+    }
+
+    function renderAgentTabs() {
+      const tabContainer = document.getElementById('agent-tabs-container');
+      if (!tabContainer) return;
+      tabContainer.innerHTML = '';
+
+      Object.keys(agentsState).forEach((id, idx) => {
+        const ag = agentsState[id];
+        const isSel = (id === activeAgentId);
+        const rNum = String((typeof ag.room_index === 'number' ? ag.room_index : idx) + 1).padStart(2, '0');
+        const btn = document.createElement('button');
+        btn.id = `tab-${id}`;
+        btn.onclick = () => selectAgent(id, true);
+        btn.className = isSel
+          ? 'tab-btn py-2 px-3 rounded-lg text-xs font-bold flex items-center gap-2 bg-cyan-500/25 text-white border border-cyan-400 shrink-0 shadow-md'
+          : 'tab-btn py-2 px-3 rounded-lg text-xs font-semibold flex items-center gap-2 text-slate-300 hover:bg-slate-800 border border-transparent shrink-0';
+
+        btn.innerHTML = `
+          <span class="w-2.5 h-2.5 rounded-full shrink-0" style="background:${ag.color || '#06b6d4'}"></span>
+          <span>${ag.name || id}</span>
+          <span class="text-[10px] font-mono px-1.5 py-0.2 rounded bg-slate-900/90 text-slate-400">R.${rNum}</span>
+        `;
+        tabContainer.appendChild(btn);
+      });
+    }
+
+    function updateSelectionHighlight() {
+      Object.keys(agentMeshes).forEach(id => {
+        const isSel = (id === activeAgentId);
+        agentMeshes[id].ring.material.opacity = isSel ? 0.95 : 0;
+        if (floatingCards[id]) {
+          floatingCards[id].classList.toggle('is-selected', isSel);
+        }
+      });
+
+      renderAgentTabs();
+
+      const bot = agentsState[activeAgentId];
+      if (!bot) return;
+
+      document.getElementById('drawer-name').textContent = bot.name || activeAgentId;
+      document.getElementById('drawer-role').textContent = bot.role || 'AI Specialist';
+      document.getElementById('drawer-task').textContent = bot.current_task || bot.task || 'Standby';
+      const rNum = String((typeof bot.room_index === 'number' ? bot.room_index : 0) + 1).padStart(2, '0');
+      document.getElementById('drawer-room-tag').textContent = `ROOM ${rNum}`;
+
+      const badge = document.getElementById('drawer-badge');
+      badge.textContent = (bot.status || 'WORKING').toUpperCase();
+
+      const dot = document.getElementById('drawer-dot');
+      dot.style.background = bot.color || '#f97316';
+
+      const delBtn = document.getElementById('btn-delete-agent');
+      if (delBtn) {
+        delBtn.classList.toggle('hidden', Boolean(bot.is_default));
+      }
+    }
+
+    function selectAgent(id, focusCamera = false) {
+      if (!agentsState[id]) return;
+      activeAgentId = id;
+      updateSelectionHighlight();
+
+      if (focusCamera && agentMeshes[id]) {
+        const pos = agentMeshes[id].group.position;
+        desiredCamTarget.set(pos.x, 2.2, pos.z);
+        desiredCamRadius = 30;
+      }
+    }
+
+    // ============================================================================
+    // 11. ADD / DELETE / COMMAND AGENT API HANDLERS
+    // ============================================================================
+    function openAddAgentModal() {
+      const modal = document.getElementById('add-agent-modal');
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+      document.getElementById('new-agent-name').focus();
+    }
+
+    function closeAddAgentModal() {
+      const modal = document.getElementById('add-agent-modal');
+      modal.classList.add('hidden');
+      modal.classList.remove('flex');
+    }
+
+    async function submitNewAgent(e) {
+      e.preventDefault();
+      const btn = document.getElementById('btn-submit-agent');
+      btn.disabled = true;
+      btn.textContent = 'Membangun Ruangan...';
+
+      const payload = {
+        name: document.getElementById('new-agent-name').value.trim(),
+        role: document.getElementById('new-agent-role').value.trim() || 'AI Autonomous Specialist',
+        badge: document.getElementById('new-agent-badge').value.trim() || 'AGENT',
+        hair_style: document.getElementById('new-agent-hair').value,
+        accessory: document.getElementById('new-agent-accessory').value,
+        color: document.getElementById('new-agent-color').value,
+        current_task: document.getElementById('new-agent-task').value.trim() || 'Aktif bekerja di ruangan baru',
+        dialogue: document.getElementById('new-agent-dialogue').value.trim() || 'Halo Boss! Ruangan kerja saya sudah aktif.'
+      };
+
+      try {
+        const res = await fetch('/api/agents', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+        if (res.ok && data.agents) {
+          syncAllAgents(data.agents);
+          closeAddAgentModal();
+          document.getElementById('add-agent-form').reset();
+          if (data.agent && data.agent.id) {
+            selectAgent(data.agent.id, true);
+          }
+        } else {
+          alert(data.detail || 'Gagal menambah agent');
+        }
+      } catch (err) {
+        alert('Gagal menghubungi server: ' + err.message);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = '➕ Buat Agent & Bangun Ruangan';
+      }
+    }
+
+    async function deleteSelectedAgent() {
+      const bot = agentsState[activeAgentId];
+      if (!bot) return;
+      if (!confirm(`Hapus agent "${bot.name}" beserta ruangannya?`)) return;
+
+      try {
+        const res = await fetch(`/api/agents/${activeAgentId}`, { method: 'DELETE' });
+        const data = await res.json();
+        if (res.ok && data.agents) {
+          syncAllAgents(data.agents);
+        } else {
+          alert(data.detail || 'Gagal menghapus agent');
+        }
+      } catch (err) {
+        alert('Error: ' + err.message);
+      }
+    }
+
+    async function submitQuickTask() {
+      const inp = document.getElementById('quick-task-input');
+      const val = inp.value.trim();
+      if (!val || !agentsState[activeAgentId]) return;
+      inp.value = '';
+
+      const bot = agentsState[activeAgentId];
+      await sendAction(bot.location || 'desk', bot.status || 'working', val, val);
+    }
+
+    async function sendAction(locKey, status, task, customDialogue = '') {
+      if (!agentsState[activeAgentId]) return;
+      const bot = agentsState[activeAgentId];
+      bot.status = status;
+      bot.location = locKey;
+      bot.current_task = task;
+      if (customDialogue) bot.dialogue = customDialogue;
+
+      botTargets[activeAgentId] = getTargetForAgent(activeAgentId, bot);
+      createOrUpdateFloatingCard(activeAgentId, bot);
+      updateSelectionHighlight();
+
+      try {
+        await fetch('/api/update', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            agent_id: activeAgentId,
+            status,
+            task,
+            location: locKey,
+            dialogue: customDialogue || task
+          })
+        });
+      } catch (err) {
+        console.error('Failed to sync state:', err);
+      }
+    }
+
+    // ============================================================================
+    // 12. ORBIT & RAYCAST INTERACTION
+    // ============================================================================
+    let isDragging = false;
+    let prevPointerX = 0;
+    let prevPointerY = 0;
+    let initialPinchDist = 0;
+    let initialPinchRadius = 76;
+    let hasMoved = false;
+
+    const raycaster = new THREE.Raycaster();
+    const mouse = new THREE.Vector2();
+
+    function onPointerDown(e) {
+      if (
+        e.target.closest('#action-drawer') ||
+        e.target.closest('header') ||
+        e.target.closest('.tab-btn') ||
+        e.target.closest('#add-agent-modal') ||
+        e.target.closest('.agent-floating-card')
+      ) return;
+
+      isDragging = true;
+      hasMoved = false;
+      const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+      const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+      prevPointerX = clientX;
+      prevPointerY = clientY;
+
+      if (e.touches && e.touches.length === 2) {
+        initialPinchDist = Math.hypot(
+          e.touches[0].clientX - e.touches[1].clientX,
+          e.touches[0].clientY - e.touches[1].clientY
+        );
+        initialPinchRadius = desiredCamRadius;
+      }
+    }
+
+    function onPointerMove(e) {
+      if (!isDragging) return;
+
+      if (e.touches && e.touches.length === 2) {
+        const currentDist = Math.hypot(
+          e.touches[0].clientX - e.touches[1].clientX,
+          e.touches[0].clientY - e.touches[1].clientY
+        );
+        const scale = initialPinchDist / currentDist;
+        desiredCamRadius = THREE.MathUtils.clamp(initialPinchRadius * scale, 16, 130);
+        return;
+      }
+
+      const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+      const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+      const dx = clientX - prevPointerX;
+      const dy = clientY - prevPointerY;
+
+      if (Math.abs(dx) > 3 || Math.abs(dy) > 3) hasMoved = true;
+
+      camTheta -= dx * 0.0065;
+      camPhi = THREE.MathUtils.clamp(camPhi - dy * 0.0065, 0.26, Math.PI / 2.1);
+
+      prevPointerX = clientX;
+      prevPointerY = clientY;
+    }
+
+    function onPointerUp(e) {
+      if (!isDragging) return;
+      isDragging = false;
+
+      if (!hasMoved) {
+        const clientX = e.changedTouches ? e.changedTouches[0].clientX : e.clientX;
+        const clientY = e.changedTouches ? e.changedTouches[0].clientY : e.clientY;
+
+        mouse.x = (clientX / window.innerWidth) * 2 - 1;
+        mouse.y = -(clientY / window.innerHeight) * 2 + 1;
+        raycaster.setFromCamera(mouse, camera);
+
+        const intersects = raycaster.intersectObjects(raycastMeshes);
+        if (intersects.length > 0) {
+          const hit = intersects[0].object;
+          if (hit.userData && hit.userData.agentId) {
+            selectAgent(hit.userData.agentId, true);
+          }
+        }
+      }
+    }
+
+    window.addEventListener('mousedown', onPointerDown);
+    window.addEventListener('mousemove', onPointerMove);
+    window.addEventListener('mouseup', onPointerUp);
+    window.addEventListener('touchstart', onPointerDown, { passive: false });
+    window.addEventListener('touchmove', onPointerMove, { passive: false });
+    window.addEventListener('touchend', onPointerUp);
+
+    window.addEventListener('wheel', (e) => {
+      if (e.target.closest('#add-agent-modal')) return;
+      desiredCamRadius = THREE.MathUtils.clamp(desiredCamRadius + e.deltaY * 0.05, 16, 135);
+    }, { passive: true });
+
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    // ============================================================================
+    // 13. REALTIME WEBSOCKET & INITIAL FETCH
+    // ============================================================================
+    async function loadInitialAgents() {
+      try {
+        const res = await fetch('/api/status');
+        const data = await res.json();
+        if (data && data.agents) {
+          syncAllAgents(data.agents);
+        }
+      } catch (e) {
+        console.error('Failed initial load:', e);
+      }
+    }
+
+    function initWebSocket() {
+      const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const ws = new WebSocket(`${proto}//${window.location.host}/ws`);
+
+      ws.onmessage = (e) => {
+        try {
+          const data = JSON.parse(e.data);
+          if (data.agents) {
+            syncAllAgents(data.agents);
+          }
+        } catch (err) {}
+      };
+
+      ws.onclose = () => {
+        setTimeout(initWebSocket, 3500);
+      };
+    }
+
+    // ============================================================================
+    // 14. HUMAN ANIMATION & RENDER LOOP
+    // ============================================================================
+    const clock = new THREE.Clock();
+
+    function animate() {
+      requestAnimationFrame(animate);
+      const time = clock.getElapsedTime();
+
+      camTarget.lerp(desiredCamTarget, 0.08);
+      camRadius += (desiredCamRadius - camRadius) * 0.08;
+      updateCameraPos();
+
+      if (window.poolWaterMesh) {
+        window.poolWaterMesh.position.y = 0.30 + Math.sin(time * 2.8) * 0.025;
+      }
+
+      cars.forEach(car => {
+        const u = car.userData;
+        if (!u.isZ) {
+          car.position.x += u.speed;
+          if (u.speed > 0 && car.position.x > 165) car.position.x = -165;
+          if (u.speed < 0 && car.position.x < -165) car.position.x = 165;
+        } else {
+          car.position.z += u.speed;
+          if (u.speed > 0 && car.position.z > 165) car.position.z = -165;
+          if (u.speed < 0 && car.position.z < -165) car.position.z = 165;
+        }
+      });
+
+      Object.keys(agentMeshes).forEach((id, idx) => {
+        const rig = agentMeshes[id];
+        const target = botTargets[id];
+        if (!rig || !target) return;
+
+        const dx = target.x - rig.group.position.x;
+        const dz = target.z - rig.group.position.z;
+        const dist = Math.hypot(dx, dz);
+
+        if (dist > 0.18) {
+          const stepSpeed = Math.min(dist * 0.075, 0.24);
+          rig.group.position.x += (dx / dist) * stepSpeed;
+          rig.group.position.z += (dz / dist) * stepSpeed;
+          rig.group.position.y = 0.85 + Math.abs(Math.sin(time * 10 + idx)) * 0.06;
+
+          rig.group.rotation.y = Math.atan2(dx, dz);
+
+          const swing = Math.sin(time * 10 + idx) * 0.6;
+          rig.leftLegPivot.rotation.x = swing;
+          rig.rightLegPivot.rotation.x = -swing;
+          rig.leftArmPivot.rotation.x = -swing * 0.8;
+          rig.rightArmPivot.rotation.x = swing * 0.8;
+          rig.humanRoot.position.y = 0;
+          rig.headGroup.rotation.x = 0;
+          rig.headGroup.rotation.y = 0;
+        } else {
+          rig.group.position.x = target.x;
+          rig.group.position.z = target.z;
+          rig.group.position.y += (target.y - rig.group.position.y) * 0.12;
+          rig.group.rotation.y = target.rotY || 0;
+
+          if (target.pose === 'working_desk') {
+            rig.humanRoot.position.y = -0.22;
+            rig.leftLegPivot.rotation.x = -1.35;
+            rig.rightLegPivot.rotation.x = -1.35;
+            rig.leftArmPivot.rotation.x = -1.15 + Math.sin(time * 16 + idx) * 0.12;
+            rig.rightArmPivot.rotation.x = -1.15 + Math.cos(time * 16 + idx) * 0.12;
+            rig.headGroup.rotation.y = Math.sin(time * 1.8 + idx) * 0.18;
+            rig.headGroup.rotation.x = 0.08;
+          } else if (target.pose === 'sitting_meeting' || target.pose === 'sitting_sofa') {
+            rig.humanRoot.position.y = -0.20;
+            rig.leftLegPivot.rotation.x = -1.3;
+            rig.rightLegPivot.rotation.x = -1.3;
+            rig.leftArmPivot.rotation.x = -0.45 + Math.sin(time * 3 + idx) * 0.15;
+            rig.rightArmPivot.rotation.x = -0.45 + Math.cos(time * 2.5 + idx) * 0.15;
+            rig.headGroup.rotation.y = Math.sin(time * 1.4 + idx) * 0.25;
+            rig.headGroup.rotation.x = Math.sin(time * 2.2) * 0.05;
+          } else if (target.pose === 'swimming') {
+            rig.humanRoot.position.y = -0.35 + Math.sin(time * 2.5 + idx) * 0.08;
+            rig.leftLegPivot.rotation.x = Math.sin(time * 6) * 0.35;
+            rig.rightLegPivot.rotation.x = -Math.sin(time * 6) * 0.35;
+            rig.leftArmPivot.rotation.x = Math.sin(time * 4) * 0.7;
+            rig.rightArmPivot.rotation.x = -Math.sin(time * 4) * 0.7;
+            rig.group.rotation.y = time * 0.4 + idx;
+          } else {
+            rig.humanRoot.position.y = 0;
+            rig.leftLegPivot.rotation.x = 0;
+            rig.rightLegPivot.rotation.x = 0;
+            rig.leftArmPivot.rotation.x = Math.sin(time * 2 + idx) * 0.08;
+            rig.rightArmPivot.rotation.x = -0.75 + Math.sin(time * 3 + idx) * 0.1;
+            rig.headGroup.rotation.y = Math.sin(time * 1.5 + idx) * 0.2;
+          }
+        }
+      });
+
+      updateFloatingCardsPositions();
+      renderer.render(scene, camera);
+    }
+
+    loadInitialAgents();
+    initWebSocket();
+    animate();
+  </script>
+</body>
+</html>
